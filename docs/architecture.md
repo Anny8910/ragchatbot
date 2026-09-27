@@ -252,6 +252,22 @@ exist to give. So the rules are:
 The redacted string — not the raw query — is what gets embedded, sent to the LLM, written to
 logs, and echoed back. If a PII pattern survives, it never leaves `pii.py`.
 
+**Three decisions P5 added, each forced by a measurement** (`data-findings.md` §8):
+
+*Phone is `[6-9]`-leading, not "any 10 digits."* Indian mobile numbers start 6-9. A bare
+`1234567890` is far more often a folio number than a phone, so the loose form would report
+account numbers under the wrong label and would make every digit rule untrustworthy.
+*PAN and Aadhaar are matched more loosely than the literal table suggests* — PAN in any
+case, Aadhaar across `-`, `/` and repeated spaces — because `abcde1234f` and
+`4829-1396-2510` are normal user input and both leaked under the strict pattern.
+*`phone` runs before `aadhaar`,* since `+91 9876543210` is 12 digits with the country code
+and the bare 12-digit Aadhaar pattern would otherwise tag a phone number as an Aadhaar. The
+digits are removed either way, but `rules_fired` is the audit trail.
+
+The "protected spans" rule is load-bearing rather than belt-and-braces: the 40-character
+keyword window means `my pin code, minimum SIP is Rs 5000` would have its Rs 5000 redacted
+without it.
+
 ---
 
 ## 7. Stage 1 — Loading and snapshotting

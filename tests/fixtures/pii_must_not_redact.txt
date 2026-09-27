@@ -1,0 +1,17 @@
+The expense ratio is 1.05%.
+Exit load is 1% for less than 7 days.
+Minimum SIP is Rs 500.
+Minimum SIP is ₹500.
+Lock-in is 3 years.
+The lock-in period for ELSS is 3 years.
+expense ratio 1.05 exit load 1.00 benchmark NIFTY 50 riskometer level 4
+ISIN: INF179K01UT0
+Launch date: 01-Jan-2013
+Benchmark: NIFTY 500 Total Return Index
+Minimum SIP amount: 100
+Riskometer level 4, category moderate
+I invested 5000 last month and the NAV moved 1.21%
+is the 1208 SIP date eligible for the exit load waiver
+total expense ratio 1.41%, minimum investment Rs 100
+exit load 1.00% and expense ratio 1.21%, NAV Rs 1447.3830
+what is the a/c transfer limit of 100000 rupees

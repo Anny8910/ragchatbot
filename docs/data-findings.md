@@ -345,6 +345,74 @@ Residual limitation, stated plainly: a leak of a short categorical value (a bare
 extraction makes such a leak structurally impossible; this layer is defence in
 depth, not the guarantee.
 
+## 8. PII scrub findings (P5)
+
+### 8.1 The false-positive side is the one that needed designing
+
+The spec is right that a blanket `[0-9]{4,}` sweep destroys this product, and the
+reason is sharper than "it would be annoying": the corpus's in-scope facts *are*
+short digit runs. Measured over the real rendered text, the only 4+ digit run
+anywhere is `2013` in `Launch date: 01-Jan-2013`. Everything else is `1.05`,
+`500`, `3`, `100`, `NIFTY 500`, `riskometer level 4`. So the scrubber's job is
+mostly *not* to fire, and a rule that looks reasonable in isolation is more
+likely to eat an answer than to catch a PAN.
+
+Two mechanisms, both asserted in both directions by the fixture tables:
+
+- **No bare sweep.** Nothing is redacted for being digits alone. Each digit rule
+  needs a PII-specific length (10-char PAN, 12-digit Aadhaar, 10-digit phone) or
+  a PII keyword within 40 characters. Verified: `minimum SIP 482913`,
+  `I invested 5000 last month` and `Launch date: 01-Jan-2013` all survive
+  unchanged.
+- **Protected spans.** Percentages and currency amounts are located first and no
+  rule may overlap them. This is load-bearing, not belt-and-braces. The 40-char
+  keyword window means `my pin code, minimum SIP is Rs 5000` puts the keyword
+  `code` next to a 4-digit run — the OTP rule alone redacts the 5000. Only the
+  protection keeps it. With the keyword present and the amount protected, the
+  scrubber redacts the *folio* number in `a/c no 1234567890, minimum SIP is
+  Rs 500` and leaves the SIP amount intact: partial redaction is the correct
+  outcome, and it is tested as such.
+
+The strongest available check runs the scrubber over the whole real corpus and
+asserts a no-op (`test_real_corpus_text_is_untouched`). The corpus is precisely
+the set of strings the assistant must be able to echo.
+
+### 8.2 Two rules had to be tightened, one had to be reordered
+
+Tightening, both forced by real inputs:
+
+- **Phone** is `[6-9]`-leading, not "any 10 digits". Indian mobile numbers start
+  6-9, and a bare `1234567890` is far more often a folio number than a phone.
+  With the loose form, `a/c no 1234567890` would be reported as a phone and the
+  account rule would never see it. Both end redacted, so this is about the label
+  `rules_fired` reports and about the loose form making every digit rule
+  untrustworthy.
+- **Aadhaar** accepts `-`, `/` and repeated spaces as 4-4-4 separators, and
+  **PAN** matches in any case. `4829-1396-2510` and a user-typed `abcde1234f` are
+  not adversarial input, they are normal input, and both leaked under the
+  spec-literal patterns. Broadening the Aadhaar separator class is safe *here*
+  only because the corpus contains no 12-digit run of any kind.
+
+Reordering: `phone` now runs before `aadhaar`. `+91 9876543210` is 12 digits once
+the country code is counted, so the bare `[0-9]{12}` Aadhaar pattern matched
+first and produced `[Aadhaar redacted]` on a phone number. The digits were still
+removed, so nothing leaked — but `rules_fired` is what the P8 trace log records,
+and a wrong PII *type* in an audit trail is a defect, not a cosmetic detail. The
+more specific pattern has to go first. Reordering was re-checked in the other
+direction: 12-digit and 4-4-4 Aadhaar numbers still carry their own label.
+
+### 8.3 Known limits, stated rather than hidden
+
+- A deliberately spaced PAN (`ab cde 1234 f`) is not caught. Matching letter
+  runs with separators would put the PAN pattern close enough to ordinary prose
+  to be unsafe, which is the exact trade this phase is supposed to avoid.
+- Keyword proximity is lexical, not semantic. A 6-digit run with no nearby
+  keyword survives; the scrubber catches keywords, not intent.
+- `scrub()` guarantees no *pattern match* survives. It cannot guarantee the
+  absence of PII in free text — only a keyword-less 4-6 digit number is a
+  plausible miss, and the product's own answers look exactly like that, which is
+  the deliberate trade.
+
 ---
 ## Unresolved — needs a human decision
 
