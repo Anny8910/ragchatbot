@@ -227,8 +227,116 @@ factsheet. `scheme_info_link` is `null` everywhere. **Unresolved** — see below
 
 ---
 
-## Unresolved — needs a human decision
+## 7. Index findings (P3)
 
+These are measured on the real corpus with real `all-MiniLM-L6-v2` vectors, not
+asserted. All three contradict something the spec assumed, so each is recorded
+with the measurement that forced the change.
+
+### 7.1 chromadb 1.5.9 does NOT use `1 - cosine`
+
+`architecture.md` §12 sets `RAG_MIN_SCORE = 0.35` as a cosine floor, and the
+P3 brief assumed a returned distance converts with `score = 1 - d`. Measured
+against analytically-known cosines of normalised vectors:
+
+| metric | max err of `1 - d` | `1 - d/2` | `1 - d²/2` |
+|---|---|---|---|
+| default (squared L2) | **1.005** | 1.1e-7 | 1.016 |
+| `hnsw:space = cosine` | 6e-8 | 0.503 | 0.500 |
+
+So on the default metric the correct conversion is `1 - d/2`, and the spec's
+formula is wrong there. Left uncorrected, a completely unrelated document scores
+**-1.01** and a merely-adjacent one **-0.59** — both far below 0.35 — so *every*
+question would be refused as class B. `Store` now sets `hnsw:space: "cosine"`
+explicitly on every collection, which makes `1 - d` correct and makes the
+conversion independent of chromadb changing its default.
+
+### 7.2 A chunk must name its scheme to be retrievable
+
+§5.2 defines `Chunk.text` as the fact text alone, e.g. `Expense ratio: 1.03`, and
+§14.1 puts the scheme name in the citation header *above* it. That is right for
+the LLM and wrong for the retriever: the five chunks of one topic are then five
+near-identical strings differing only in a number, and the embedding has almost
+no scheme-discriminating signal.
+
+Measured on 10 scheme-specific questions, gold = the named scheme's chunk:
+
+| embedded text | correct scheme ranked 1st | median rank | top-to-bottom spread |
+|---|---|---|---|
+| bare fact text | **3/10** | 3 of 5 | 0.01 – 0.03 (noise) |
+| `scheme_name` + `heading` + fact text | **8/10** | 1 of 5 | 0.10 – 0.23 |
+
+`Store.embedding_text()` adds the prefix for embedding only; the clean text is
+kept in metadata under `body` and restored on read, so §5.2's "the only field
+sent to the LLM" still holds. Two consequences that were easy to get wrong:
+
+- the 256 word-piece cap must be checked on the **prefixed** string, because that
+  is what MiniLM actually encodes (max in this corpus: 88, not 75);
+- the embedding cache is keyed on the **embedded text**, not `Chunk.content_hash`.
+  Keyed on the content hash it would have served the pre-prefix vectors for ever.
+
+The two remaining misses are `exit load of HDFC Equity Flexi Cap` and
+`minimum SIP for HDFC Equity Flexi Cap` — both rank S1 first. S2's live name is
+`HDFC Flexi Cap Direct Plan-Growth` while the brief calls it HDFC Equity Fund, so
+the query's wording is nearest to a different scheme. Alias resolution is a
+retriever concern (§14.4), not an embedding fix.
+
+### 7.3 `RAG_MIN_SCORE = 0.35` is not a calibrated threshold
+
+Probe of 9 in-domain and 10 out-of-domain questions against the real index:
+
+- in-domain: 0.82 / 0.77 / 0.74 / 0.73 / 0.61 / 0.61 / 0.60 / **0.27** / **0.04**
+- out-of-domain: 0.01 … 0.20, then **0.30** and **0.37**
+
+**The two distributions overlap** (`What is the TER?` is in-domain at 0.04;
+`stock market tips for tomorrow` is out-of-domain at 0.37), so no threshold
+separates them. 0.35 happens to pass 7/9 in-domain and 1/10 out-of-domain, but
+that is a coincidence of this corpus, not a property of the metric.
+
+Two causes, both actionable in P4:
+
+1. **Vocabulary gaps are invisible to the score.** The corpus says "expense
+   ratio" and never "TER", so a correct question scores 0.04. A synonym/alias
+   map is needed, not a lower threshold — lowering it would also admit
+   `stock market tips`.
+2. **The score measures "does the query name a scheme we have", not "is the
+   topic right".** Because the prefix put every scheme name in, any
+   scheme-naming query scores 0.6–0.82 regardless of topic. Topic therefore has
+   to come from routing (§14.4 rules + LLM classifier), with the score used only
+   as a weak floor. This is a direct argument for keeping the two-layer triage
+   rather than trusting a single score gate.
+
+### 7.4 The value-overlap guard needs evidence-grade thresholds
+
+P2's `guard()` is a no-op in practice: it compares forbidden field *names*
+(`nav`) against rendered *labels* (`NAV`), two sets that cannot intersect by
+construction. The builder therefore adds a second layer that looks for
+forbidden fields' **values** inside the rendered text.
+
+The first version matched raw substrings with a 4-character floor and **failed
+the build on the clean S5 snapshot**: `peerComparison` is a *list of other
+funds' records*, whose categorical fields contain `"High"`, and `"High"` occurs
+legitimately in `Riskometer level: Moderately High`. Current rules, both forced
+by real payloads:
+
+- strings shorter than 12 chars are ignored — short categorical words (`High`,
+  `Medium`, `Open-ended`) carry no evidence of a leak;
+- numerics shorter than 4 chars are ignored — a rating of `3` or a tenure of `1`
+  appears in ordinary text by chance;
+- both classes match on **word boundaries**, so `1.2` cannot match inside `1.21`
+  and `High` cannot match inside `Moderately High`;
+- any value also carried by an allowlisted field is ignored, which is what keeps
+  `category_info`'s repeated `Large Cap` from flagging the legitimate
+  `category: Large Cap`.
+
+Residual limitation, stated plainly: a leak of a short categorical value (a bare
+`"High"`) would still pass. That is acceptable only because the allowlist
+extraction makes such a leak structurally impossible; this layer is defence in
+depth, not the guarantee.
+
+---
+
+## Unresolved — needs a human decision
 1. **Class D factsheet link.** Options: point at `sid_url` (the official AMC domain,
    e.g. `https://www.hdfcfund.com`, which is an official publisher but a homepage
    rather than a factsheet), add a real SEBI/AMFI factsheet source, or drop the link

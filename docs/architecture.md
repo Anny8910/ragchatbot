@@ -191,6 +191,16 @@ One row per URL in `sources.yaml`. This is the unit the deliverable D2 reports.
 routes class-D questions to the right factsheet, and it lets the eval suite report accuracy
 per topic instead of one blended number.
 
+**Note (added in P3, from measurement).** `text` is the fact text alone, e.g.
+`Expense ratio: 1.03`, and §14.1 puts the scheme name in the citation header above it. That
+is correct for the generator but leaves the *retriever* with no scheme signal: the five chunks
+of one topic become near-identical strings, and the correct scheme ranked first in only 3 of
+10 questions with a score spread of 0.01–0.03. `Store.embedding_text()` therefore embeds
+`scheme_name` + `heading` + `text` (8/10, spread 0.10–0.23). The prefix is embedding-only —
+`body` carries the clean text back out — so "the only field sent to the LLM" still holds
+literally. Consequences: the 256 word-piece cap is checked on the *prefixed* string, and the
+embedding cache is keyed on the embedded text rather than `content_hash`.
+
 ### 5.3 Answer
 
 ```python
@@ -426,8 +436,15 @@ scheme. Re-running the build on an unchanged corpus does zero embedding work.
 - Query: `collection.query(query_embeddings=[v], n_results=k+2, where=...)`. The
   `where` filter supports the scheme-scoped query (§14.4) and lets a UI dropdown restrict
   retrieval to one scheme.
-- `hnsw:space` left at Chroma's cosine default. No tuning: at this corpus size (hundreds of
-  chunks) a brute-force scan is exact and an index is overhead.
+- `hnsw:space` **set explicitly to `"cosine"`**, not "left at Chroma's default". chromadb
+  1.5.9's default is squared L2, for which the correct conversion is `1 - d/2`, not `1 - d`
+  (§7.1 of `data-findings.md` has the measurement). The naive `1 - d` on the default metric
+  scores an unrelated document at **-1.01**, which would drive every question to class B.
+  Being explicit also makes the conversion survive a future default change.
+- A `where` clause may carry only **one** operator, so a combined `scheme_id` + `topic`
+  filter must be written as `{"$and": [{...}, {...}]}`. Passing both as bare keys raises.
+- The stored `document` is the **embedding** text (§5.2 note), which carries the scheme name
+  and heading as a prefix; the clean fact text is kept in metadata as `body`.
 - The index lives in `data/index/` and is **gitignored** — it is derived state, and a committed
   vector index is an unreviewable binary diff.
 
@@ -464,6 +481,20 @@ figures, which is the worst outcome this system can have.
 Relative thresholds ("top result much better than the rest") are explicitly **not** used: with
 a 5-scheme corpus, an off-topic question returns five equally bad matches, and a relative rule
 happily picks the best of them.
+
+**Correction from P3 measurement (`data-findings.md` §7.3).** The "0.45–0.75 on-topic vs
+0.05–0.20 off-topic" figures above do not hold on this corpus. Measured: scheme-naming
+questions score 0.60–0.82, but *out-of-domain* questions reach 0.30–0.37 (`stock market tips for
+tomorrow` = 0.37) and *in-domain* questions using vocabulary absent from the corpus fall to
+0.04 (`What is the TER?` — the pages say "expense ratio", never "TER"). The two distributions
+**overlap**, so 0.35 cannot separate them: no threshold will.
+
+Two consequences for Stage 6. First, the score is a weak floor, not the gate's main input —
+topic and scheme have to come from the §13/§14 routing, which is the argument for keeping
+two-layer triage. Second, vocabulary gaps need an explicit synonym/alias map
+(`TER` → `expense ratio`); lowering the threshold instead would also admit `stock market tips`.
+The 0.35 default is kept as a starting value, and the eval-set calibration this section
+promises is still owed before the number is trusted.
 
 ### 12.2 Class B output
 
