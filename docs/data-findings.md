@@ -229,10 +229,19 @@ factsheet. `scheme_info_link` is `null` everywhere. **Unresolved** — see below
 
 ## Unresolved — needs a human decision
 
-1. **Q1: is `groww.in` an acceptable publisher?** All five sources are
-   `source_tier: brief`. The PRD lists a conflict between the brief's URLs and the
-   AMC/SEBI/AMFI requirement, and this gates the PRD's own acceptance criteria. The
-   data cannot settle it.
-2. **Class D factsheet link.** Options: point at `sid_url` (AMC homepage, official but
-   not a factsheet), add a real SEBI/AMFI factsheet source, or drop the link
-   requirement. Cannot be decided from the five pages.
+1. **Class D factsheet link.** Options: point at `sid_url` (the official AMC domain,
+   e.g. `https://www.hdfcfund.com`, which is an official publisher but a homepage
+   rather than a factsheet), add a real SEBI/AMFI factsheet source, or drop the link
+   requirement. `brochure_link` is null and there are zero PDF links across all five
+   pages, so this cannot be resolved from the corpus. **Cannot be decided from the
+   five pages.**
+
+## Resolved
+
+1. **Q1: is `groww.in` an acceptable publisher? YES — resolved 2026-09-27.** The five
+   groww.in pages are acceptable and form the primary corpus. The reasoning: Groww is
+   a regulated broker publishing standardised scheme data, which is materially
+   different from the third-party blog/forum commentary the brief's ban targets. The
+   `source_tier` stays `"brief"` for all five so that no row is ever presented as an
+   official AMC/SEBI/AMFI document, and every manifest row discloses its `publisher`.
+   Any genuine AMC/SEBI/AMFI page added later uses `source_tier: "official_ref"`.

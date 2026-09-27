@@ -75,19 +75,40 @@ One AMC: **HDFC Asset Management**. Five schemes, one per URL in the brief.
 | S4 | HDFC Small Cap Fund | Small cap | Direct Growth | `https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth` |
 | S5 | HDFC Balanced Advantage Fund | Balanced Advantage (hybrid) | Direct Growth | `https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-plan-growth` |
 
-**In-scope topics** (the six named in the brief): expense ratio · exit load · minimum SIP ·
-ELSS lock-in period · riskometer and benchmark · how to download a statement.
+**In-scope topics — six, enumerated so the count is verifiable:**
+
+1. expense ratio · 2. exit load · 3. minimum SIP · 4. ELSS lock-in period ·
+5. riskometer · 6. benchmark
+
+> **Two corrections to this section (2026-09-27), both evidence-based — see
+> `docs/data-findings.md`.**
+>
+> *The brief named seven facts, not six.* The original wording here read "the six
+> named in the brief" and then listed "riskometer **and** benchmark" as one item, so
+> the list held seven. Riskometer and benchmark are two distinct facts from two
+> distinct fields (`nfo_risk`, `benchmark_name`) and are enumerated separately, which
+> is why the `6 topics × 5 schemes = 30` class-A eval count in `docs/architecture.md`
+> and `docs/implementation.md` holds.
+>
+> *"How to download a statement" has been dropped from scope.* It is absent from all
+> five pages: zero of the 97 data fields on any page mentions a statement, download,
+> or capital gains. It is an investor-portal help-centre topic, not a fund attribute.
+> Dropped rather than sourced from an invented page, and recorded as a known limit.
 
 **Corpus sources to collect:** the pages above plus supporting official material — factsheets,
 KIM/SID, scheme FAQ pages, fee-and-charges pages, riskometer/benchmark notes, and
 statement/tax-document guides, from AMC, SEBI, or AMFI.
 
-> **Sourcing tension — needs an instructor decision (§13-Q1).** The brief says to collect
-> pages "from AMC/SEBI/AMFI" and forbids third-party blogs, but the five URLs it supplies are
-> on **groww.in**, a broker/aggregator rather than the AMC or a regulator. The PRD treats
-> these five as the primary corpus, and requires that any supporting page be an official
-> AMC/SEBI/AMFI document. The source list must disclose the distinction rather than present
-> all rows as official.
+> **Sourcing — RESOLVED 2026-09-27 (§13-Q1).** The brief says to collect pages "from
+> AMC/SEBI/AMFI" and forbids third-party blogs, but the five URLs it supplies are on
+> **groww.in**, a broker/aggregator rather than the AMC or a regulator. **Answer: the
+> groww.in pages are acceptable sources.** They are the primary corpus, they remain
+> `source_tier: brief` rather than `official_ref`, and every row in the manifest
+> discloses `publisher` so no citation is presented as official when it is not.
+> Groww is neither a blog nor a forum: it is a regulated broker publishing
+> standardised scheme data, which is materially different from the third-party
+> commentary the brief's ban is aimed at. Any supporting page that *is* an official
+> AMC/SEBI/AMFI document uses `source_tier: official_ref`.
 
 ---
 
@@ -264,7 +285,7 @@ requirements that distinguish a RAG system from a document lookup.
 
 | # | Question | Why it matters | Recommendation |
 |---|----------|----------------|----------------|
-| Q1 | Are the groww.in pages acceptable sources, given the brief also says "AMC/SEBI/AMFI" and bans third-party blogs? | Affects D2 and the credibility of every citation | Ask the instructor. Default: use the 5 as primary corpus, disclose the publisher per row, and cite official AMC/SEBI/AMFI documents wherever they cover the same fact |
+| Q1 | Are the groww.in pages acceptable sources, given the brief also says "AMC/SEBI/AMFI" and bans third-party blogs? | Affects D2 and the credibility of every citation | **RESOLVED 2026-09-27: yes.** Use the 5 as primary corpus, disclose the publisher per row, and cite official AMC/SEBI/AMFI documents wherever they cover the same fact |
 | Q2 | Which LLM generates the answer? The brief fixes embeddings but names no LLM. | Drives latency, hosting, and whether an API key exists on demo day | Local Ollama (`llama3.5`/`qwen2.5:7b`) as default so the demo cannot fail on network; hosted model behind the same interface as an upgrade |
 | Q3 | Is the corpus limited to exactly 5 URLs, or 5 scheme pages plus official reference pages? | "How to download a capital-gains statement" and riskometer methodology are unlikely to be on the 5 scheme pages | Allow official AMC/SEBI/AMFI reference pages as a documented extension; list every URL actually used, and state the count plainly in the README |
 | Q4 | Is the page content fetchable, and are figures current at fetch time? | Fee figures change; a stale snapshot is a correctness problem, not just a freshness one | Snapshot at build time, stamp the fetch date, and state in the README that figures are as-of that date |

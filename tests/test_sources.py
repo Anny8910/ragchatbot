@@ -161,3 +161,36 @@ def test_live_fund_name_resolves_for_every_snapshot(sources):
         )
         checked += 1
     assert checked == 5
+
+
+def test_no_source_is_disclosed_as_official(sources):
+    """PRD Q1 was resolved 2026-09-27: groww.in IS acceptable, but only on the
+    condition that no row is presented as an official AMC/SEBI/AMFI document.
+
+    Groww is a broker, so all five rows must stay source_tier "brief" and must
+    name their real publisher. A row claiming "official_ref" or an
+    hdfcfund.com/sebi/amfi publisher would misstate provenance on every citation
+    the assistant emits.
+    """
+    for src in sources:
+        assert src.source_tier == "brief", (
+            f"{src.source_id}: tier is {src.source_tier!r}; the groww.in corpus is "
+            f"not official and must not be labelled as such"
+        )
+        assert src.publisher == "groww.in", (
+            f"{src.source_id}: publisher {src.publisher!r} must be disclosed "
+            f"accurately"
+        )
+
+
+def test_manifest_discloses_publisher_and_tier(tmp_path, sources):
+    """Every manifest row must carry a non-empty publisher and tier, so D2 can be
+    audited row by row."""
+    out = tmp_path / "manifest.csv"
+    write_manifest(sources, str(out))
+    with out.open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    assert len(rows) == 5
+    for r in rows:
+        assert r["publisher"] == "groww.in"
+        assert r["source_tier"] == "brief"

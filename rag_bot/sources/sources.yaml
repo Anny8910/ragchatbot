@@ -1,10 +1,14 @@
 # Source registry for the mutual-fund FAQ assistant.
 #
 # Publisher note: all five sources are source_tier "brief" because the URLs come
-# from the problem statement. PRD open question Q1 asks whether groww.in is an
-# acceptable publisher, or whether the corpus must come from the AMC/SEBI/AMFI.
-# That is unresolved and gates the PRD's own acceptance criteria. See
-# docs/data-findings.md.
+# from the problem statement, and they sit on groww.in, a broker rather than the
+# AMC or a regulator. PRD open question Q1 asked whether that is acceptable; it
+# was RESOLVED 2026-09-27 as YES, on the grounds that Groww is a regulated broker
+# publishing standardised scheme data rather than the third-party commentary the
+# brief's ban targets. The tier stays "brief" so that no row is ever presented as
+# an official AMC/SEBI/AMFI document, and every row discloses its publisher. Any
+# genuine AMC/SEBI/AMFI page added later uses source_tier "official_ref".
+# See docs/PRD.md section 4 and docs/data-findings.md.
 
 sources:
   - source_id: hdfc_large_cap_growth
