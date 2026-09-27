@@ -281,7 +281,7 @@ The two remaining misses are `exit load of HDFC Equity Flexi Cap` and
 the query's wording is nearest to a different scheme. Alias resolution is a
 retriever concern (§14.4), not an embedding fix.
 
-### 7.3 `RAG_MIN_SCORE = 0.35` is not a calibrated threshold
+### 7.3 `RAG_MIN_SCORE = 0.35` is not a calibrated threshold — and cannot be
 
 Probe of 9 in-domain and 10 out-of-domain questions against the real index:
 
@@ -293,18 +293,29 @@ Probe of 9 in-domain and 10 out-of-domain questions against the real index:
 separates them. 0.35 happens to pass 7/9 in-domain and 1/10 out-of-domain, but
 that is a coincidence of this corpus, not a property of the metric.
 
-Two causes, both actionable in P4:
+Confirmed at full scale in P4 against all 48 labeled eval rows
+(`docs/chunking-decision.md` §2): outcome A spans 0.397–0.848 and outcome B spans
+0.364–0.784. At 0.35 the gate changes **nothing** for the labeled set — 0 of 5 B
+rows and 0 of 33 A rows land on the wrong side.
+
+Two causes, one of which is not fixable at this layer:
 
 1. **Vocabulary gaps are invisible to the score.** The corpus says "expense
-   ratio" and never "TER", so a correct question scores 0.04. A synonym/alias
-   map is needed, not a lower threshold — lowering it would also admit
-   `stock market tips`.
-2. **The score measures "does the query name a scheme we have", not "is the
-   topic right".** Because the prefix put every scheme name in, any
-   scheme-naming query scores 0.6–0.82 regardless of topic. Topic therefore has
-   to come from routing (§14.4 rules + LLM classifier), with the score used only
-   as a weak floor. This is a direct argument for keeping the two-layer triage
-   rather than trusting a single score gate.
+   ratio" and never "TER", so a correct question scores 0.04. Fixed in P4 by
+   query-side synonym expansion (`retrieve/retriever.py`): "What is the TER?" went
+   0.040 → 0.550. This is the "tighten what is matched" fix the spec asks for
+   instead of moving the threshold.
+2. **The labeled B/C/D questions are topically adjacent, not off-topic.** An AUM
+   question retrieves the minimum-SIP chunk at 0.78; "best 1-year return"
+   retrieves the benchmark chunk at 0.69. They concern the same subject matter and
+   ask for a figure the corpus deliberately withholds, so a similarity score is
+   measuring the right thing at the wrong level. **No threshold can fix this** —
+   class B/C/D has to be decided from the question text by the §13 rule layer
+   (P6). Until that exists, the gate is a floor for questions with no topical
+   overlap at all (`How do I cook pasta?` = 0.037) and nothing more.
+
+This is a direct argument for keeping the two-layer triage: §13 already puts rules
+first, so the correction fixes §12's premise, not its design.
 
 ### 7.4 The value-overlap guard needs evidence-grade thresholds
 

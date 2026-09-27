@@ -332,6 +332,12 @@ def build(cfg: Config, *, rebuild: bool = False, dry_run: bool = False,
     cache.prune(set(keys))
 
     print(_summarise(chunks, docs, max_pieces, store.name))
+    # architecture 12 insists a similarity threshold is meaningless without the
+    # model that produced it, so the build states both together.
+    print(
+        f"gate floor      {cfg.min_score} cosine "
+        f"({cfg.embed_model}) -- calibrated in docs/chunking-decision.md"
+    )
     print(
         f"embeddings     {cache.hits} reused, {recomputed} recomputed "
         f"(cache: {cache.dir})"

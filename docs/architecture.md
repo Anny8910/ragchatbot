@@ -482,19 +482,28 @@ Relative thresholds ("top result much better than the rest") are explicitly **no
 a 5-scheme corpus, an off-topic question returns five equally bad matches, and a relative rule
 happily picks the best of them.
 
-**Correction from P3 measurement (`data-findings.md` §7.3).** The "0.45–0.75 on-topic vs
-0.05–0.20 off-topic" figures above do not hold on this corpus. Measured: scheme-naming
-questions score 0.60–0.82, but *out-of-domain* questions reach 0.30–0.37 (`stock market tips for
-tomorrow` = 0.37) and *in-domain* questions using vocabulary absent from the corpus fall to
-0.04 (`What is the TER?` — the pages say "expense ratio", never "TER"). The two distributions
-**overlap**, so 0.35 cannot separate them: no threshold will.
+**Correction from P4 measurement (`data-findings.md` §7.3, `chunking-decision.md` §2–4).** The
+"0.45–0.75 on-topic vs 0.05–0.20 off-topic" figures above do not hold on this corpus. Measured
+on all 48 labeled eval rows: outcome A scores 0.397–0.848, outcome B scores 0.364–0.784. **The
+two distributions overlap completely**, so no threshold separates them, and at 0.35 the gate
+changes **nothing** for the labeled set — 0 of 5 B rows and 0 of 33 A rows fall on the wrong
+side.
 
-Two consequences for Stage 6. First, the score is a weak floor, not the gate's main input —
-topic and scheme have to come from the §13/§14 routing, which is the argument for keeping
-two-layer triage. Second, vocabulary gaps need an explicit synonym/alias map
-(`TER` → `expense ratio`); lowering the threshold instead would also admit `stock market tips`.
-The 0.35 default is kept as a starting value, and the eval-set calibration this section
-promises is still owed before the number is trusted.
+The cause is not miscalibration. The labeled B/C/D questions are *topically adjacent financial*
+questions, not off-topic ones: an AUM question retrieves the minimum-SIP chunk at 0.78, and
+"best 1-year return" retrieves the benchmark chunk at 0.69. They are about the same subject
+matter and ask for a fact the corpus deliberately withholds, so a similarity score cannot
+distinguish them — it is measuring the right thing at the wrong level.
+
+Consequences, in order of importance:
+
+1. **Class B/C/D must come from the question, not the retrieved chunks.** That is §13's rule
+   layer, and it is not optional. The score is a floor for questions with no topical overlap
+   (`How do I cook pasta?` = 0.037), not the class-B decision.
+2. `RAG_MIN_SCORE` stays at 0.35 — below every A row with 0.047 of margin. 0.40 was rejected:
+   it catches one labeled B row while leaving 0.003 of margin below a valid A question.
+3. Query-side synonym expansion is part of retrieval (`retrieve/retriever.py`), not a threshold
+   change: "What is the TER?" went 0.040 → 0.550 because the pages say "expense ratio".
 
 ### 12.2 Class B output
 
