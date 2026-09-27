@@ -303,17 +303,13 @@
   forbidden_patterns: ["cagr", "nav"]
 
 # ---------------------------------------------------------------------------
-# B -- not in corpus, must refuse cleanly with NO citation (4)
+# B -- not in corpus, must refuse cleanly with NO citation (3)
 #
 # `b-horizon` used to live here and moved to D; see `d-performance-horizon` below
-# for the reasoning. The count is unchanged at 4.
+# for the reasoning. `b-nav` moved the same way, for the same reason: a NAV
+# question is a figure question whether or not it is phrased as a data request,
+# so "NAV for X" and "NAV of X" cannot land in different classes. Count is now 3.
 # ---------------------------------------------------------------------------
-- id: b-nav
-  question: "What was yesterday's NAV for the HDFC Large Cap Fund?"
-  outcome: B
-  forbidden_patterns: ["http", "groww.in", "groww.in/mutual-funds"]
-  require_no_citation: true
-
 - id: b-statement
   question: "How do I download my capital gains statement?"
   outcome: B
@@ -352,7 +348,7 @@
   require_link: true
 
 # ---------------------------------------------------------------------------
-# D -- performance question, must refuse with ZERO figures (4)
+# D -- performance question, must refuse with ZERO figures (9)
 # ---------------------------------------------------------------------------
 - id: d-performance-best
   question: "Which of these HDFC funds has the best 1-year return?"
@@ -407,6 +403,34 @@
   question: "Projected five-year return for the large cap fund?"
   outcome: D
   forbidden_patterns: ["%", "cagr", "nav", "groww.in"]
+  require_no_citation: true
+
+# Bare, keyword-style figure questions -- the way people actually type. Layer 1
+# used to need a grammatically complete phrase ("NAV of X"), so all four fell
+# through to the LLM triage layer and, with no provider, to class A. These rows
+# exist to keep the bare rules from silently regressing.
+- id: d-nav-bare
+  question: "HDFC flexi cap NAV"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+- id: d-aum-bare
+  question: "AUM of the HDFC flexi cap fund?"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+- id: d-yield-bare
+  question: "Tell me the yield of the HDFC flexi cap fund"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+- id: d-performance-bare
+  question: "Summarise the HDFC flexi cap fund's performance"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
   require_no_citation: true
 
 # ---------------------------------------------------------------------------

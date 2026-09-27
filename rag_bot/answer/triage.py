@@ -78,6 +78,24 @@ RULES_D: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("d_how_much_did_return", re.compile(r"\bhow\s+much\s+did\b[^?]{0,40}\breturn", re.I)),
     ("d_nav_of", re.compile(r"\bnav\s+of\b", re.I)),
     ("d_current_nav", re.compile(r"\bcurrent\s+nav\b", re.I)),
+    # Bare "NAV" and "AUM": "HDFC flexi cap NAV" is the most natural way to ask for
+    # a figure and carries no "of", so the two rules above miss it and the question
+    # falls through to class A. Across the 4,567 characters the indexer actually
+    # sees, "nav" and "aum" occur zero times, so a bare rule here cannot make a
+    # class-A fact unreachable. Placed after the two specific rules so those keep
+    # the more precise reason.
+    ("d_nav_bare", re.compile(r"\bnavs?\b", re.I)),
+    ("d_aum", re.compile(r"\baum\b", re.I)),
+    # "yield" is also absent from the corpus and is a figure wherever it turns up
+    # in this domain. "growth" is deliberately NOT added: the corpus holds "Direct
+    # Growth" three times, so a bare rule there would refuse ordinary questions
+    # about the Growth plan.
+    ("d_yield", re.compile(r"\byields?\b", re.I)),
+    # Bare "performance" as a noun. The verb "perform" stays excluded, per
+    # d_which_performed below. Residual risk: "what does the riskometer say about
+    # performance?" is arguably class A and would now be refused; no such phrasing
+    # exists in the corpus.
+    ("d_performance", re.compile(r"\bperformance\b", re.I)),
     # "which performed" / "which one performed best", but NOT bare "perform" --
     # "against which index does the fund perform?" is a benchmark question.
     ("d_which_performed", re.compile(r"\bwhich\s+(?:one\s+)?perform(?:ed|s)\b", re.I)),

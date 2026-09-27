@@ -156,6 +156,11 @@ def test_b_rows_stay_out_of_triage(rows, sources):
     A B question that triage claims is not what the corpus-not-found path is for,
     and a B question routed to D would trade "here is what I cover" for a
     factsheet link on a question that was never about returns.
+
+    `b-nav` used to sit here and was moved to D (`d-nav`). A NAV request is a
+    figure request however it is phrased, so "NAV for X" cannot be B while the
+    long-standing `d_nav_of` rule makes "NAV of X" a D. The trade-off this test
+    guards against still applies to the rows that remain.
     """
     wrong = [
         (r["id"], classify(r["question"], sources=sources, use_llm=False).reason)
@@ -488,22 +493,31 @@ PARAPHRASES = [
     "compare the performance of all five",
 ]
 
+# Of the 11, this one is now caught by the bare `performance` rule, so it no
+# longer demonstrates a layer-1 blind spot. Split out rather than deleted, so the
+# count below stays an 11-row measurement and the routing test can assert that a
+# layer-1 catch costs zero LLM calls.
+PARAPHRASES_LAYER_1 = ["compare the performance of all five"]
+PARAPHRASES_LAYER_2 = [q for q in PARAPHRASES if q not in PARAPHRASES_LAYER_1]
+
 
 def test_layer_one_recall_on_paraphrases_is_recorded_not_assumed():
     """Architecture 13.2's premise, asserted so it cannot quietly rot.
 
     Layer 1 matches named phrases, so paraphrases of advice and performance
-    questions MISS it -- measured at 0 of 11 here. That is the designed state, not
-    a defect: layer 2 exists precisely so those blind spots are a tuning problem
-    rather than a product boundary. What must not change is that layer 1 still
-    catches every labelled C/D row and every prepared demo question; if this ratio
-    ever moves, the rule list has been over-fitted to the eval set and the
+    questions MISS it -- measured at 1 of 11 caught here, and that one is deliberate
+    (see PARAPHRASES_LAYER_1). The blind spots are the designed state, not a defect:
+    layer 2 exists precisely so they are a tuning problem rather than a product
+    boundary. What must not change is that layer 1 still catches every labelled C/D
+    row and every prepared demo question; if the caught set ever grows beyond the
+    one named above, the rule list has been over-fitted to the eval set and the
     class-A gate is the thing at risk.
     """
-    caught = [q for q in PARAPHRASES if classify_rules(q) is not None]
-    assert len(caught) == 0, (
-        f"layer 1 now catches {len(caught)}/11 paraphrases: {caught}. If this is "
-        f"intentional, update the count AND re-check the class-A gate -- added "
+    caught = {q for q in PARAPHRASES if classify_rules(q) is not None}
+    assert caught == set(PARAPHRASES_LAYER_1), (
+        f"layer 1 now catches {sorted(caught)}; expected exactly "
+        f"{sorted(PARAPHRASES_LAYER_1)}. If this is intentional, move the new "
+        f"entries into PARAPHRASES_LAYER_1 AND re-check the class-A gate -- added "
         f"paraphrase rules are the most likely way to break it."
     )
 
@@ -511,8 +525,12 @@ def test_layer_one_recall_on_paraphrases_is_recorded_not_assumed():
 def test_paraphrases_are_still_routed_when_a_classifier_is_available(sources):
     """The end-to-end promise: a paraphrase is handled, by layer 2 if not layer 1."""
     llm = CountingLLM("D_performance")
-    for question in PARAPHRASES:
+    for question in PARAPHRASES_LAYER_1:
         result = classify(question, sources=sources, provider=llm, use_llm=True)
         assert result.outcome is Outcome.D_PERFORMANCE_REFUSED, (question, result)
-        assert result.layer == "llm"
-    assert llm.calls == len(PARAPHRASES)
+        assert result.layer == "rules", (question, result)
+    for question in PARAPHRASES_LAYER_2:
+        result = classify(question, sources=sources, provider=llm, use_llm=True)
+        assert result.outcome is Outcome.D_PERFORMANCE_REFUSED, (question, result)
+        assert result.layer == "llm", (question, result)
+    assert llm.calls == len(PARAPHRASES_LAYER_2)
