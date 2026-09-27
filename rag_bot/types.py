@@ -28,11 +28,25 @@ TriageLayer = Literal["rules", "llm"]
 
 
 class Outcome(str, Enum):
-    """The four answer classes from PRD §5, plus error."""
+    """The four answer classes from PRD §5, plus error, plus class E.
+
+    E_NEEDS_SCHEME is not one of the PRD's four answer classes. It exists because
+    the eval set has always carried two `outcome: E` rows (`e-ambiguous-er`,
+    `e-ambiguous-lock`) with `expect_behavior: ask_which_scheme`, and architecture
+    14.4.5 requires the same: an unresolvable scheme gets a question back, never a
+    figure from whichever fund happened to rank first.
+
+    P7 added it. Without a letter for it, the only available outcomes were B
+    ("not in the indexed sources", which is false -- the fact IS indexed, the
+    question just did not say which of the five) or A with no source, which
+    breaks F7's guarantee that a class A answer carries exactly one URL. The enum
+    gained the member rather than the behaviour being quietly bent to fit it.
+    """
     A_ANSWERED = "A"
     B_NOT_IN_CORPUS = "B"
     C_ADVICE_REFUSED = "C"
     D_PERFORMANCE_REFUSED = "D"
+    E_NEEDS_SCHEME = "E"
     ERROR = "error"
 
 
