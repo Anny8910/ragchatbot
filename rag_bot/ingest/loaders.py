@@ -164,8 +164,12 @@ def load_all(sources: list[Source]) -> list[Document]:
     return [load_source(src) for src in sources]
 
 
-def load_from_manifest(manifest_path: str) -> list[Document]:
-    """Convenience: read the manifest and load every source it lists."""
+def load_from_manifest(manifest_path: str, registry: list[Source] | None = None) -> list[Document]:
+    """Convenience: read the manifest and load every source it lists.
+
+    Pass `registry` (the sources.yaml list) so factsheet_url and aliases survive
+    into the Source, and from there into Chunk metadata for the class-D link.
+    """
     from rag_bot.sources.manifest import read_manifest
 
-    return load_all(read_manifest(manifest_path))
+    return load_all(read_manifest(manifest_path, registry=registry))

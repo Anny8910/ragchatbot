@@ -3,7 +3,26 @@
 **How to use this file:** one phase at a time, in order. Each phase is a self-contained
 Cursor prompt. Paste the prompt, review the diff, run the verify commands, commit, then move
 on. Do not run two phases in parallel — the data contracts in Phase 0 propagate into every
-later phase, and a type change in P3 silently breaks P8.
+later phase, and a type change in P2 silently breaks P7.
+
+> **Phase numbering (corrected 2026-09-27).** The original P2, a denylist scrubber over raw
+> HTML, was **dissolved**: it could not be made correct (see `data-findings.md` §4). Its job
+> was split in two — extraction by allowlist in **P2**, enforcement as a hard build failure in
+> **P3**. Every phase after the old P2 therefore shifted down by one:
+>
+> | old | new | |
+> |---|---|---|
+> | P3 | **P2** | loaders, chunker, eval labels |
+> | P4 | **P3** | embedding, Chroma store, builder |
+> | P5 | **P4** | retriever, relevance gate |
+> | P6 | **P5** | PII scrub |
+> | P7 | **P6** | triage router |
+> | P8 | **P7** | generation, validation, assembly |
+> | P9 | **P8** | UI, trace logging |
+> | P10 | **P9** | eval harness, chunking decision, D4 |
+> | P11 | **P10** | README, demo script, hardening |
+>
+> P0 and P1 are unchanged. §22's phase numbers are unaffected; only the `P<n>` labels moved.
 
 **Source of truth:** `docs/architecture.md` (design), `docs/PRD.md` (requirements).
 This file adds the *how*: exact files, exact signatures, exact verification.
@@ -12,16 +31,16 @@ This file adds the *how*: exact files, exact signatures, exact verification.
 |----------|--------------|
 | P0 Scaffold + contracts | (new — prerequisite for everything) |
 | P1 Sources + fetch | §22 phase 0 |
-| P2 Sanitize | §22 phase 1 |
-| P3 Loaders + chunker + eval labels | §22 phase 2 |
-| P4 Embedding + Chroma + builder | §22 phase 3 |
-| P5 Retriever + gate | §22 phase 4 |
-| P6 PII scrub | §22 phase 5 |
-| P7 Triage router | §22 phase 6 |
-| P8 Generation + validation + assembly | §22 phase 7 |
-| P9 UI | §22 phase 8 |
-| P10 Eval + chunking decision + D4 | §22 phase 9 |
-| P11 README + demo + hardening | §22 phase 10 |
+| ~~P2 Sanitize~~ | **DISSOLVED** — the denylist scrubber was replaced by the P2 allowlist and the P3 gate |
+| P2 Loaders + chunker + eval labels | §22 phase 2 |
+| P3 Embedding + Chroma + builder | §22 phase 3 |
+| P4 Retriever + gate | §22 phase 4 |
+| P5 PII scrub | §22 phase 5 |
+| P6 Triage router | §22 phase 6 |
+| P7 Generation + validation + assembly | §22 phase 7 |
+| P8 UI | §22 phase 8 |
+| P9 Eval + chunking decision + D4 | §22 phase 9 |
+| P10 README + demo + hardening | §22 phase 10 |
 
 ---
 
@@ -52,7 +71,7 @@ cost time: invented scope, and silent design drift.
 - [ ] Any deviation from this document is written down and justified
 - [ ] `git commit` with the phase name
 
-**Commit message format:** `P<n>: <what landed>`, e.g. `P5: retriever + relevance gate`.
+**Commit message format:** `P<n>: <what landed>`, e.g. `P4: retriever + relevance gate`.
 
 ---
 
@@ -82,7 +101,7 @@ print(m.tokenizer.tokenize('The expense ratio is 1.05% per annum.'))
 ```
 
 Expected: `max_seq_length: 256`, `dim: 384`. If `max_seq_length` is not 256, stop and raise it
-— P3 and P4 both depend on this number. Then keep the model in the local cache
+— P2 and P3 both depend on this number. Then keep the model in the local cache
 (`~/.cache/huggingface`) so demo day needs no network.
 
 **Decide Q1 and Q4 before P1 finishes.** See §"Blocking questions" at the end of this file.
@@ -388,7 +407,8 @@ sources:
     source_tier: brief
     scheme_id: S1
     scheme_name: "HDFC Large Cap Fund – Direct Growth"
-    factsheet_url: null          # filled from the page in P3 if present
+    factsheet_url: null          # no factsheet on the groww pages; resolved to the
+                                 # AMC factsheet page instead. See sources.yaml.
     aliases: ["hdfc large cap", "large cap fund", "large cap", "s1"]
   # ... S2 flexi cap (hdfc-equity-fund), S3 ELSS (hdfc-elss-tax-saver),
   #     S4 small cap (hdfc-small-cap-fund), S5 balanced advantage
@@ -486,139 +506,37 @@ Implement P1 only. Create exactly these files:
    byte size of each snapshot. If any source is "blocked", say so plainly and
    stop -- do not invent substitute content.
 
-Do not create any other file. Do not parse or clean the HTML yet (that is P3).
+Do not create any other file. Do not parse or clean the HTML yet (that is P2).
 ```
 
 ---
 
-## P2 — Sanitize snapshots
+## ~~P2 — Sanitize snapshots~~ (DISSOLVED)
 
-**Goal:** remove performance and contact data from the corpus *before* it is ever chunked or
-indexed, so the no-claims constraint is enforced by data absence (architecture §8).
+**Superseded 2026-09-27. This phase was specified but never built, and should not be built.**
 
-**Files to create**
+The original P2 was `rag_bot/sources/sanitize.py`: a set of regexes run over raw HTML to strip
+performance and contact data *before* chunking. It was dropped for two measured reasons, both
+recorded in `docs/data-findings.md` §4:
 
-```
-rag_bot/sources/sanitize.py
-tests/test_sanitize.py
-data/corpus/sanitize_report.json    (generated)
-```
+- **False positives.** A rule for the word `return` deleted
+  `NIFTY 500 Total Return Index` — the benchmark, an in-scope fact. Rules for `%` and `Growth`
+  would have deleted the expense ratio and the plan name. The scrubber's own output would have
+  failed the demo it was built to protect.
+- **False negatives.** The key `return1d` does not match `\breturn\b`, so
+  `simple_return`/`sip_return`/`return_stats` — every return figure on the page — passed
+  through untouched. A 300-word fixture using realistic key names leaks; a toy fixture does
+  not. A test that never sees the real key names cannot catch this, and one that does would
+  have failed.
 
-**Sanitization rules — apply in this order, whole-section first**
-
-1. **Section removal by heading.** Drop any section whose heading matches, case-insensitively:
-   `returns?`, `performance`, `nav`, `historical nav`, `growth of \d+`, `ranking`,
-   `fund ranking`, `peer group`, `riskometer score` (keep the *level* text, drop the score),
-   `sip calculator`, `calculator`, `returns calculator`, `portfolio`.
-2. **Inline figure removal** (fallback for figures outside a matching section). Remove a
-   sentence or table row when a return/NAV keyword occurs within the same line or the
-   adjacent line, together with a number:
-   - keywords: `1 ?year|3 ?year|5 ?year|since inception|cagr|return|returns|gain|performance|p\.?a\.?`
-   - NAV keywords: `nav|nav as of|price`
-   - ranking keywords: `rank(ed)?|percentile|peer group|top ?\d+`
-   - the number: a percentage (`\d+(\.\d+)?\s*%`) or a currency amount (`₹[\d,]+` / `Rs\.? ?[\d,]+`)
-3. **Contact/PII removal from the page:** email addresses, phone numbers, "enter your PAN"
-   prompts, agent contact blocks, registration CTAs.
-4. **Replacement, not deletion, for removed performance sections:** leave the single sentence
-   "Performance figures for this scheme are available in the official factsheet." so a
-   class-D question has something honest to retrieve and the assistant can point somewhere.
-
-**Hard constraint: never remove a fee.** Expense ratio, exit load, minimum SIP, minimum
-investment, and lock-in figures are the product. Add an explicit guard list of
-must-preserve keywords (`expense ratio`, `exit load`, `minimum sip`, `lock-in`, `lock in`,
-`benchmark`, `riskometer level`, `direct plan`, `growth plan`) — a line matching one of these is
-never removed, even if it contains a percentage. Write a test for this: a table row reading
-`Expense ratio (Direct Growth): 1.05%` survives sanitization untouched.
-
-**Report shape** (`sanitize_report.json`)
-
-```json
-{"sources": [{"source_id": "hdfc_large_cap_growth",
-  "before_tokens": 0, "after_tokens": 0,
-  "rules_fired": {"section_heading": 4, "inline_figure": 27, "contact": 3},
-  "removed_pct": 0.0,
-  "preserved_fee_lines": 11,
-  "warning": null}]}
-```
-
-Set `"warning": "sanitization removed X% of this source"` when `removed_pct > 40`. That
-warning is the tripwire for over-aggressive stripping.
-
-**`sanitize.py` required shape**
-
-```python
-def sanitize_text(text: str, *, source_id: str) -> tuple[str, dict]:
-    """Return (sanitized_text, stats). Never raises."""
-
-def sanitize_source(src: Source, text: str) -> tuple[str, dict]:
-    """Apply sanitize_text and record preserved fee lines. Never raises."""
-
-def write_report(reports: list[dict], out_path: str) -> None: ...
-```
-
-**Verify**
-
-```bash
-pytest tests/test_sanitize.py -q
-python3 -m rag_bot.sources.sanitize            # if a CLI entry is added
-python3 -c "import json;r=json.load(open('data/corpus/sanitize_report.json'));\
-print([(s['source_id'],s['removed_pct'],s['preserved_fee_lines']) for s in r['sources']])"
-rg -in "cagr|since inception|1 year return|3 year return|\bnav\b" data/corpus/snapshots/ || echo "no returns left"
-rg -in "expense ratio" data/corpus/snapshots/ | head        # must still find fee tables
-```
-
-The last two commands are the real check: the first must find nothing, the second must find
-plenty. If the first finds matches, sanitization is incomplete. If the second finds nothing,
-you have over-stripped and the product cannot answer anything.
-
-**Cursor prompt**
-
-```
-Implement Phase P2: corpus sanitization. Implement P2 only.
-Create exactly: rag_bot/sources/sanitize.py, tests/test_sanitize.py
-
-Goal: strip performance, NAV, ranking, and contact data from page snapshots
-BEFORE they are chunked or indexed, so the assistant structurally cannot quote
-a return figure. See docs/architecture.md section 8.
-
-1. sanitize_text(text, *, source_id) -> (str, stats). Apply rules in this order:
-   a) whole-section removal by heading, matching (case-insensitive):
-      returns?, performance, nav, historical nav, growth of, ranking, fund ranking,
-      peer group, sip calculator, calculator, portfolio
-      Drop the riskometer *score* but keep the riskometer *level* text.
-   b) inline figure removal: drop a line when a return/NAV/ranking keyword AND a
-      number (percentage or currency) co-occur on the same or adjacent line.
-   c) contact removal: emails, phone numbers, "enter your PAN", agent contact
-      blocks, registration CTAs.
-   d) wherever a performance section was removed, leave one sentence:
-      "Performance figures for this scheme are available in the official factsheet."
-
-2. CRITICAL GUARD: never remove a line containing any of these:
-   expense ratio, exit load, minimum sip, minimum investment, lock-in, lock in,
-   benchmark, riskometer level, direct plan, growth plan
-   even if that line contains a percentage. Test that the line
-   "Expense ratio (Direct Growth): 1.05%" survives untouched.
-
-3. Return stats: before_tokens, after_tokens, rules_fired counts, removed_pct,
-   preserved_fee_lines. Add a warning key when removed_pct > 40.
-
-4. tests/test_sanitize.py, using realistic fixture strings, not toy input:
-   - a returns table is removed
-   - an expense-ratio table survives
-   - an exit-load table survives
-   - "CAGR 14.2%" and "1 year return 12.4%" are removed
-   - a rank/percentile row is removed
-   - an email and a phone number are removed
-   - a riskometer LEVEL sentence survives while its SCORE row is removed
-   - sanitizing twice is idempotent
-
-Do not create other files. Do not fetch anything. Do not touch loaders.py
-(that is P3). Run pytest and paste the output.
-```
+Splitting the intent in two is the fix. **P2** extracts by allowlist, so a forbidden field is
+never *selected* and cannot reach the corpus; **P3** re-checks the rendered text and refuses to
+write an index on any hit. The no-claims guarantee rests on the allowlist, not on pattern
+matching, which is why it does not need to be perfect.
 
 ---
 
-## P3 — Loaders, chunker, and eval labels
+## P2 — Loaders, chunker, and eval labels
 
 **Goal:** snapshots become clean, structured, correctly-sized chunks; and the eval set exists
 **before** chunking is finalized, so the §9.3 experiment is meaningful.
@@ -627,6 +545,7 @@ Do not create other files. Do not fetch anything. Do not touch loaders.py
 
 ```
 rag_bot/ingest/__init__.py
+rag_bot/ingest/allowlist.py       # ALLOWED_FIELDS is the guarantee
 rag_bot/ingest/loaders.py
 rag_bot/ingest/chunker.py
 rag_bot/eval/__init__.py
@@ -709,9 +628,9 @@ def chunk_document(doc: Document, *, target_tokens: int, overlap_tokens: int,
 def chunk_all(docs: list[Document], **kw) -> list[Chunk]: ...
 ```
 
-**The tokenizer is injected, never imported inside the chunker.** P3 must be testable without
+**The tokenizer is injected, never imported inside the chunker.** P2 must be testable without
 downloading a model, so tests pass a whitespace-token stub that returns `len(text.split())`.
-P4 supplies the real word-piece tokenizer.
+P3 supplies the real word-piece tokenizer.
 
 **`eval_set.yaml` — must exist before chunking is finalized**
 
@@ -779,7 +698,7 @@ its label are in the same chunk. That is the demo's most important chunk.
 **Cursor prompt**
 
 ```
-Implement Phase P3: snapshot loaders, the chunker, and the eval set.
+Implement Phase P2: snapshot loaders, the chunker, and the eval set.
 Create exactly:
   rag_bot/ingest/__init__.py, rag_bot/ingest/loaders.py, rag_bot/ingest/chunker.py,
   rag_bot/eval/__init__.py, rag_bot/eval/eval_set.yaml,
@@ -824,12 +743,12 @@ Read docs/architecture.md sections 7, 8, and 9 first.
    forward progress on a pathological input, id stability, topic assignment.
 
 Run pytest and paste output. Do not create other files. Do not download a
-model. Do not build an index yet (that is P4).
+model. Do not build an index yet (that is P3).
 ```
 
 ---
 
-## P4 — Embedding, Chroma store, builder
+## P3 — Embedding, Chroma store, builder
 
 **Goal:** a rebuildable on-disk index, and proof that no chunk is silently truncated.
 
@@ -918,7 +837,7 @@ python3 -m rag_bot.ingest.builder               # incremental
 python3 -m rag_bot.ingest.builder --dry-run     # chunk + token counts, no index write
 ```
 
-Pipeline: load manifest → `load_all` → `sanitize` (in memory; P2's rules) → `chunk_all` →
+Pipeline: load manifest → `load_all` → **HARD GUARD** → `chunk_all` →
 `assert_fits` every chunk (**hard fail, never index a truncated chunk**) → embed in batches →
 upsert → delete orphans (chunks whose `source_id` is no longer in the manifest) → print a
 summary: sources, chunks, per-topic counts, max word-pieces, collection name.
@@ -959,7 +878,7 @@ print('chunks:', s.count())
 **Cursor prompt**
 
 ```
-Implement Phase P4: local embedding, the Chroma store, and the index builder.
+Implement Phase P3: local embedding, the Chroma store, and the index builder.
 Create exactly:
   rag_bot/providers/__init__.py, rag_bot/providers/base.py,
   rag_bot/providers/minilm.py, rag_bot/providers/fake.py,
@@ -994,12 +913,13 @@ Read docs/architecture.md sections 9, 10, and 11 first.
    the convention you settled on in a comment.
 
 5. ingest/builder.py: CLI with --rebuild, --dry-run, and default incremental.
-   Flow: read manifest -> load_all -> sanitize in memory -> chunk_all ->
-   assert_fits EVERY chunk (hard fail the build; never index a truncated chunk) ->
+   Flow: read manifest -> load_all -> HARD GUARD (refuse the build) -> chunk_all ->
+   assert_fits EVERY chunk on the EMBEDDED text (hard fail; never index a
+   truncated chunk) ->
    embed in batches -> upsert -> delete orphan chunks whose source_id is gone
    from the manifest -> print summary (sources, chunks, per-topic counts, max
    word-pieces, collection name).
-   Cache embeddings on disk keyed by chunk content_hash so an unchanged corpus
+   Cache embeddings on disk keyed by the EMBEDDED text so an unchanged corpus
    re-runs with zero embedding work. Report reused vs recomputed counts.
 
 6. tests: collection name format, flat metadata, upsert/query round trip with the
@@ -1011,7 +931,7 @@ create other files.
 
 ---
 
-## P5 — Retriever and relevance gate
+## P4 — Retriever and relevance gate
 
 **Goal:** rank chunks, and refuse class B before any LLM is called.
 
@@ -1055,7 +975,7 @@ def evaluate(chunks: list[ScoredChunk], *, min_score: float,
 ```
 
 The class-B message must list what the assistant *can* answer — expense ratio, exit load,
-minimum SIP, ELSS lock-in, riskometer/benchmark, statement download. A refusal that says what
+minimum SIP, ELSS lock-in, riskometer, benchmark. A refusal that says what
 it knows reads as scoped; one that says "not found" reads as broken.
 
 **Watch out — no relative thresholds.** Do not implement "top result much better than the
@@ -1086,14 +1006,14 @@ for q in ['What is the expense ratio of HDFC Large Cap Fund?',
 
 You are looking for a **clear gap** between on-topic scores (expect roughly 0.45–0.75) and
 off-topic ones (expect roughly 0.05–0.20). If in-scope and off-topic scores overlap, do not
-lower the threshold — tighten the chunking or go back to P3. Write the observed score
+lower the threshold — tighten the chunking or go back to P2. Write the observed score
 distribution into `docs/chunking-decision.md`; it is the evidence for the `RAG_MIN_SCORE`
-choice in P10.
+choice in P9.
 
 **Cursor prompt**
 
 ```
-Implement Phase P5: retrieval and the relevance gate. Implement P5 only.
+Implement Phase P4: retrieval and the relevance gate. Implement P4 only.
 Create exactly:
   rag_bot/retrieve/__init__.py, rag_bot/retrieve/retriever.py,
   rag_bot/retrieve/gate.py, tests/test_gate.py
@@ -1109,7 +1029,9 @@ Read docs/architecture.md section 12 first.
    order: empty index, no candidates, top score below min_score, borderline
    within 0.05 of min_score. The class-B message must name the six covered
    topics (expense ratio, exit load, minimum SIP, ELSS lock-in,
-   riskometer/benchmark, statement download) and must never contain a URL.
+   riskometer, benchmark) and must never contain a URL. `statement download` was in
+   this list until 2026-09-27 and is now wrong: no source carries statement-download
+   guidance, so promising it would be a refusal that lies about its own scope.
 
 3. Do NOT implement any relative or margin-based threshold. Only the absolute
    min_score comparison. A relative rule picks the best of five equally bad
@@ -1125,7 +1047,7 @@ Run pytest and paste output. Do not create other files.
 
 ---
 
-## P6 — PII scrub
+## P5 — PII scrub
 
 **Goal:** no PAN, Aadhaar, account number, OTP, email, or phone number ever reaches the
 embedder, the LLM, the logs, or the screen (architecture §6).
@@ -1168,7 +1090,7 @@ def scrub(text: str) -> ScrubResult:
     """
 
 def scrub_for_log(text: str) -> str:
-    """Same rules, returns a plain string. Used by the trace logger in P9."""
+    """Same rules, returns a plain string. Used by the trace logger in P8."""
 ```
 
 **Fixture tables are the deliverable of this phase.** `tests/fixtures/pii_must_redact.txt` and
@@ -1204,7 +1126,7 @@ second must redact nothing. The third must redact the phone and keep "Rs 500".
 **Cursor prompt**
 
 ```
-Implement Phase P6: PII scrubbing at the input boundary. Implement P6 only.
+Implement Phase P5: PII scrubbing at the input boundary. Implement P5 only.
 Create exactly:
   rag_bot/safety/__init__.py, rag_bot/safety/pii.py, tests/test_pii.py,
   tests/fixtures/pii_must_redact.txt, tests/fixtures/pii_must_not_redact.txt
@@ -1237,7 +1159,7 @@ Run pytest and paste the output. Do not create other files.
 
 ---
 
-## P7 — Triage router
+## P6 — Triage router
 
 **Goal:** classes C and D decided by deterministic rules *before* retrieval, with a zero
 false-positive rate on the six in-scope topics.
@@ -1355,7 +1277,7 @@ by *lengthening* patterns, never by adding a banned bare keyword.
 **Cursor prompt**
 
 ```
-Implement Phase P7: the pre-retrieval triage router. Implement P7 only.
+Implement Phase P6: the pre-retrieval triage router. Implement P6 only.
 Create exactly:
   rag_bot/answer/__init__.py, rag_bot/answer/triage.py,
   rag_bot/answer/schemes.py, rag_bot/answer/refusals.py,
@@ -1403,7 +1325,7 @@ Do not create other files.
 
 ---
 
-## P8 — Generation, validation, assembly
+## P7 — Generation, validation, assembly
 
 **Goal:** class A answers that are ≤3 sentences, cite exactly one URL from retrieval
 metadata, match the asked scheme, and contain no return figure.
@@ -1520,13 +1442,13 @@ def format_footer(fetched_at_iso: str | None) -> str:
 def answer_question(question: str, *, cfg: Config, store: Store,
                     embedder: EmbeddingProvider, llm: LLMProvider,
                     sources: list[Source]) -> Answer:
-    """1. scrub PII (P6)              -> redacted question
-       2. triage (P7)                 -> C or D short-circuits here, no retrieval
-       3. resolve scheme (P7)         -> scheme_id or ambiguity
-       4. retrieve (P5), scheme-scoped
-       5. gate (P5)                   -> class B short-circuits, LLM never called
-       6. generate (P8)
-       7. validate + assemble (P8)
+    """1. scrub PII (P5)              -> redacted question
+       2. triage (P6)                 -> C or D short-circuits here, no retrieval
+       3. resolve scheme (P6)         -> scheme_id or ambiguity
+       4. retrieve (P4), scheme-scoped
+       5. gate (P4)                   -> class B short-circuits, LLM never called
+       6. generate (P7)
+       7. validate + assemble (P7)
 
     EVERY Answer carries retrieved_chunks, including refusals -- the class must
     see what retrieval found even when the assistant declines to answer.
@@ -1576,8 +1498,8 @@ not, raise a specific question rather than lowering the temperature further.
 **Cursor prompt**
 
 ```
-Implement Phase P8: generation, structural validation, and answer assembly.
-Implement P8 only. Create exactly:
+Implement Phase P7: generation, structural validation, and answer assembly.
+Implement P7 only. Create exactly:
   rag_bot/answer/prompts.py, rag_bot/answer/generator.py,
   rag_bot/answer/validate.py, rag_bot/answer/assemble.py,
   rag_bot/providers/ollama.py, rag_bot/providers/openai.py,
@@ -1628,7 +1550,7 @@ Run pytest and paste output. Do not create other files.
 
 ---
 
-## P9 — UI and trace logging
+## P8 — UI and trace logging
 
 **Goal:** the tiny Streamlit app with four visually distinct answer states, the chunk
 expander, the disclaimer, and redacted trace logs.
@@ -1709,14 +1631,14 @@ pytest tests/ -q
 streamlit run app.py
 ```
 
-Then click through all six questions from the P8 verify block and confirm: the four states are
+Then click through all six questions from the P7 verify block and confirm: the four states are
 visually distinct, the expander opens for a refusal, the disclaimer is visible, and
 `data/logs/run.jsonl` shows `pii=clean` or `pii=redacted:<rules>` and never a raw PAN.
 
 **Cursor prompt**
 
 ```
-Implement Phase P9: the Streamlit UI and trace logging. Implement P9 only.
+Implement Phase P8: the Streamlit UI and trace logging. Implement P8 only.
 Create exactly: app.py, rag_bot/ui/__init__.py, rag_bot/ui/components.py,
 rag_bot/ui/sidebar.py, rag_bot/trace.py, deliverables/disclaimer.txt
 
@@ -1747,12 +1669,12 @@ rag_bot/ui/sidebar.py, rag_bot/trace.py, deliverables/disclaimer.txt
    validation report). Do NOT add screenshots or back-end tooling -- the brief
    forbids back-end screenshots.
 
-Do not create other files. Do not modify P0-P8 modules except to import from them.
+Do not create other files. Do not modify P0-P7 modules except to import from them.
 ```
 
 ---
 
-## P10 — Eval harness, chunking decision, sample Q&A **\[DELIVERABLE D4\]**
+## P9 — Eval harness, chunking decision, sample Q&A **\[DELIVERABLE D4\]**
 
 **Goal:** measured per-class accuracy, a written chunking decision, and a generated
 `sample_qa.md` covering all four classes.
@@ -1838,8 +1760,8 @@ failure, not a metric to trade off. If a gate fails, fix the cause and say so in
 **Cursor prompt**
 
 ```
-Implement Phase P10: the eval harness, the chunking-decision write-up, and the
-generated sample Q&A. Implement P10 only. Create exactly:
+Implement Phase P9: the eval harness, the chunking-decision write-up, and the
+generated sample Q&A. Implement P9 only. Create exactly:
   rag_bot/eval/classes.py, rag_bot/eval/run_eval.py, rag_bot/eval/report.py,
   docs/chunking-decision.md, deliverables/sample_qa.md (generated, not handwritten)
 
@@ -1877,7 +1799,7 @@ Run the eval and paste the full per-class output. Do not create other files.
 
 ---
 
-## P11 — README, demo script, hardening
+## P10 — README, demo script, hardening
 
 **Goal:** the submission runs from a clean clone, and the demo is repeatable.
 
@@ -1939,7 +1861,7 @@ are as reliable as the happy path.
 **Cursor prompt**
 
 ```
-Implement Phase P11: README, demo script, and final hardening. Implement P11
+Implement Phase P10: README, demo script, and final hardening. Implement P10
 only. Create exactly: README.md, deliverables/demo_script.md. Update
 requirements.txt to exact pins and .env.example if anything drifted.
 
@@ -1991,7 +1913,7 @@ official AMC/SEBI/AMFI pages — which is the brief's own stated preference, so 
 recoverable rather than fatal.
 
 **Q7 — Hosting or the video fallback?**
-Decide before P11 so the effort split is right. The video path needs a scripted, repeatable
+Decide before P10 so the effort split is right. The video path needs a scripted, repeatable
 demo, which is why `demo_script.md` is written to be followed literally.
 
 ---

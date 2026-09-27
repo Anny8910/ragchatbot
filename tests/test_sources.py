@@ -194,3 +194,67 @@ def test_manifest_discloses_publisher_and_tier(tmp_path, sources):
     for r in rows:
         assert r["publisher"] == "groww.in"
         assert r["source_tier"] == "brief"
+
+
+# -- class-D factsheet link (resolved 2026-09-27) --------------------------
+
+
+def test_every_source_carries_a_factsheet_link(sources):
+    """Class D must have somewhere official to send the user.
+
+    The five groww pages contain no factsheet (brochure_link is null, zero PDF
+    links), so the link is the AMC's own factsheet page. A source without one
+    would make the class-D refusal a dead end.
+    """
+    for src in sources:
+        assert src.factsheet_url, f"{src.source_id} has no factsheet_url"
+        assert src.factsheet_url.startswith("https://"), src.factsheet_url
+
+
+def test_the_factsheet_link_is_the_official_amc_not_the_broker(sources):
+    for src in sources:
+        assert "hdfcfund.com" in src.factsheet_url, src.factsheet_url
+        assert "groww.in" not in src.factsheet_url, (
+            "the class-D link must be the official publisher, not the broker"
+        )
+
+
+def test_the_factsheet_link_is_not_month_stamped(sources):
+    """A "Fund Facts - <Scheme>_July 26.pdf" URL rots within a month."""
+    for src in sources:
+        low = src.factsheet_url.lower()
+        assert not low.endswith(".pdf"), "a month-stamped PDF URL would rot"
+        for stamp in ("2025", "2026", "jan", "july", "monthly"):
+            assert stamp not in low.split("/")[-1], src.factsheet_url
+
+
+def test_the_registry_join_survives_the_manifest_round_trip(tmp_path, sources):
+    """read_manifest alone would drop factsheet_url and aliases.
+
+    The manifest has no column for either, because it records what was FETCHED
+    and the factsheet page is deliberately not fetched. Without the registry join
+    the class-D link silently becomes None.
+    """
+    out = tmp_path / "manifest.csv"
+    write_manifest(sources, str(out))
+    with_registry = read_manifest(str(out), registry=sources)
+    without = read_manifest(str(out))
+    for src in with_registry:
+        assert src.factsheet_url == sources[0].factsheet_url
+        assert src.aliases
+    assert all(s.factsheet_url is None for s in without)
+    assert all(s.aliases == () for s in without)
+
+
+def test_the_factsheet_link_reaches_chunk_metadata():
+    """The link has to survive all the way into the index, not stop at the Source."""
+    from rag_bot.config import load
+    from rag_bot.index.store import Store
+
+    cfg = load()
+    store = Store(cfg.index_dir, cfg.embed_model, "v1")
+    if store.count() == 0:
+        pytest.skip("no index built")
+    got = store._collection.get(include=["metadatas"])
+    urls = {m["factsheet_url"] for m in got["metadatas"]}
+    assert urls == {"https://www.hdfcfund.com/mutual-funds/factsheets"}

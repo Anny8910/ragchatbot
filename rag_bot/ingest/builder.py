@@ -249,7 +249,10 @@ def build(cfg: Config, *, rebuild: bool = False, dry_run: bool = False,
     if problems:
         raise GuardFailure("invalid configuration: " + "; ".join(problems))
 
-    docs = load_from_manifest(f"{cfg.corpus_dir}/manifest.csv")
+    from rag_bot.sources.fetch import load_sources
+
+    registry = load_sources(cfg.sources_file)
+    docs = load_from_manifest(f"{cfg.corpus_dir}/manifest.csv", registry=registry)
     if not docs:
         log.error("manifest lists no sources; nothing to build")
         return 1

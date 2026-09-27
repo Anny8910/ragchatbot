@@ -18,9 +18,25 @@ sources:
     source_tier: brief
     scheme_id: S1
     scheme_name: "HDFC Large Cap Fund – Direct Growth"
-    # No factsheet PDF exists on any of the five pages (brochure_link is null
-    # and there are zero PDF links). P3 cannot fill this in from these sources.
-    factsheet_url: null
+    # Class-D link. RESOLVED 2026-09-27: no factsheet PDF exists on any of the
+    # five groww pages (brochure_link is null, zero PDF links), so the link is
+    # the AMC's own factsheet page instead of a PDF.
+    #
+    #   https://www.hdfcfund.com/mutual-funds/factsheets
+    #
+    # It is the official publisher, it is not month-stamped (the per-scheme PDFs
+    # are "Fund Facts - <Scheme>_July 26.pdf" and would rot), and it is where
+    # returns legitimately live. That is the point: the corpus deliberately
+    # contains zero returns, so a class-D refusal that hands the user the
+    # official performance document is honest rather than merely evasive.
+    #
+    # VERIFICATION CAVEAT: an automated fetch of that URL returns HTTP 403 (AMC
+    # bot protection), not 200. Existence was confirmed from the search index,
+    # which returned the page's real content. A browser opens it normally. Per
+    # the P1 lesson, an unverified status is recorded as unverified rather than
+    # asserted as 200. sid_url (https://www.hdfcfund.com) remains the
+    # corpus-verified fallback.
+    factsheet_url: https://www.hdfcfund.com/mutual-funds/factsheets
     # "large cap" alone is EXCLUDED: it is this scheme's category label.
     aliases: ["hdfc large cap fund", "large cap fund", "hdfc large cap", "hdfc large cap fund direct growth", "s1"]
 
@@ -37,7 +53,9 @@ sources:
     # so HDFC has rebranded it. The brief's name is kept here for traceability
     # to the source document, and the note below records the current name.
     scheme_name: "HDFC Equity Fund – Direct Growth"
-    factsheet_url: null
+    # Class-D link: the AMC's own factsheet page. Full rationale and the
+    # 403 verification caveat are on the first source.
+    factsheet_url: https://www.hdfcfund.com/mutual-funds/factsheets
     # Aliases cover BOTH names, because a user may use either the current
     # official name or the older one the brief uses.
     #
@@ -58,7 +76,9 @@ sources:
     source_tier: brief
     scheme_id: S3
     scheme_name: "HDFC ELSS Tax Saver Fund – Direct Growth"
-    factsheet_url: null
+    # Class-D link: the AMC's own factsheet page. Full rationale and the
+    # 403 verification caveat are on the first source.
+    factsheet_url: https://www.hdfcfund.com/mutual-funds/factsheets
     # S3 is the only ELSS scheme here, so "elss" is unambiguous on its own and
     # is the phrasing users actually use. "tax saver fund" is equally distinctive.
     aliases: ["hdfc elss tax saver fund", "hdfc elss", "elss tax saver fund", "tax saver fund", "hdfc tax saver fund", "elss", "s3"]
@@ -70,7 +90,9 @@ sources:
     source_tier: brief
     scheme_id: S4
     scheme_name: "HDFC Small Cap Fund – Direct Growth"
-    factsheet_url: null
+    # Class-D link: the AMC's own factsheet page. Full rationale and the
+    # 403 verification caveat are on the first source.
+    factsheet_url: https://www.hdfcfund.com/mutual-funds/factsheets
     # "small cap" alone is EXCLUDED: it is this scheme's category label.
     aliases: ["hdfc small cap fund", "small cap fund", "hdfc small cap", "hdfc small cap fund direct growth", "s4"]
 
@@ -86,7 +108,9 @@ sources:
     source_tier: brief
     scheme_id: S5
     scheme_name: "HDFC Balanced Advantage Fund – Direct Growth"
-    factsheet_url: null
+    # Class-D link: the AMC's own factsheet page. Full rationale and the
+    # 403 verification caveat are on the first source.
+    factsheet_url: https://www.hdfcfund.com/mutual-funds/factsheets
     # "balanced advantage" alone is EXCLUDED: it is this scheme's category label
     # ("Hybrid Balanced Advantage"). "balanced advantage fund" is safe.
     aliases: ["hdfc balanced advantage fund", "balanced advantage fund", "hdfc balanced advantage", "hdfc balanced advantage fund direct growth", "s5"]

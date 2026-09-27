@@ -335,18 +335,43 @@ extraction makes such a leak structurally impossible; this layer is defence in
 depth, not the guarantee.
 
 ---
-
 ## Unresolved — needs a human decision
-1. **Class D factsheet link.** Options: point at `sid_url` (the official AMC domain,
-   e.g. `https://www.hdfcfund.com`, which is an official publisher but a homepage
-   rather than a factsheet), add a real SEBI/AMFI factsheet source, or drop the link
-   requirement. `brochure_link` is null and there are zero PDF links across all five
-   pages, so this cannot be resolved from the corpus. **Cannot be decided from the
-   five pages.**
+
+_Nothing outstanding. The class-D factsheet question was the last open item and is
+resolved below (2026-09-27)._
 
 ## Resolved
 
-1. **Q1: is `groww.in` an acceptable publisher? YES — resolved 2026-09-27.** The five
+1. **Class D factsheet link — RESOLVED 2026-09-27.** The five groww pages carry no
+   factsheet (`brochure_link` null, zero PDF links), so the link is the AMC's own
+   factsheet page: `https://www.hdfcfund.com/mutual-funds/factsheets`, set as
+   `factsheet_url` on all five sources.
+
+   Chosen over the two alternatives for three reasons. It is the **official
+   publisher**, so class D points at the AMC rather than the broker. It is **not
+   month-stamped** — the per-scheme PDFs are `Fund Facts - <Scheme>_July 26.pdf`
+   and would rot within a month, and a dead link in a refusal is worse than no
+   link. And it is architecturally the right destination: **the corpus
+   deliberately contains zero returns**, so handing the user the official
+   performance document is the honest exit rather than an evasion. A refusal that
+   says "returns are not in the indexed sources — here is the AMC's factsheet"
+   is exactly the behaviour §13 asks for.
+
+   **Verification caveat, stated rather than glossed.** An automated fetch of that
+   URL returns **HTTP 403** (AMC bot protection), not 200. Existence was confirmed
+   from the search index, which returned the page's real content, and a browser
+   opens it normally. Per the P1 lesson — content heuristics are not a status
+   check — the 403 is recorded as the observed status rather than asserting 200.
+   The corpus-verified `sid_url` (`https://www.hdfcfund.com`) remains the fallback.
+
+   This also fixed a silent data-loss bug: `read_manifest` hardcoded
+   `factsheet_url=None` and `aliases=()`, so registry metadata never reached
+   chunks. The manifest has no column for either because it records what was
+   *fetched* and this page deliberately is not; `read_manifest` now takes the
+   registry and joins on `source_id`. The link is verified present in all 45
+   chunk records.
+
+2. **Q1: is `groww.in` an acceptable publisher? YES — resolved 2026-09-27.** The five
    groww.in pages are acceptable and form the primary corpus. The reasoning: Groww is
    a regulated broker publishing standardised scheme data, which is materially
    different from the third-party blog/forum commentary the brief's ban targets. The

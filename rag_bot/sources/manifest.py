@@ -69,11 +69,20 @@ def write_manifest(sources: list[Source], out_path: str) -> None:
             writer.writerow(_row(src))
 
 
-def read_manifest(path: str) -> list[Source]:
-    """Inverse of write_manifest."""
+def read_manifest(path: str, registry: list[Source] | None = None) -> list[Source]:
+    """Inverse of write_manifest.
+
+    `registry` is the sources.yaml list. The manifest is provenance for what was
+    FETCHED, so it has no column for a factsheet link or for name aliases -- both
+    are registry metadata, and one of them points at a page we deliberately do
+    not fetch. Passing the registry fills those two fields in by source_id;
+    without it they stay None/() and the caller loses the class-D link.
+    """
+    meta: dict[str, Source] = {s.source_id: s for s in (registry or [])}
     out: list[Source] = []
     with Path(path).open(encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
+            extra = meta.get(row["source_id"])
             out.append(
                 Source(
                     source_id=row["source_id"],
@@ -82,8 +91,8 @@ def read_manifest(path: str) -> list[Source]:
                     source_tier=row["source_tier"],
                     scheme_id=row["scheme_id"] or None,
                     scheme_name=row["scheme_name"],
-                    factsheet_url=None,
-                    aliases=(),
+                    factsheet_url=extra.factsheet_url if extra else None,
+                    aliases=extra.aliases if extra else (),
                     fetched_at=row["fetched_at"] or None,
                     snapshot_path=row["snapshot_path"] or None,
                     content_hash=row["content_hash"] or None,

@@ -232,7 +232,7 @@ def test_the_builder_refuses_to_index_an_over_cap_chunk(tmp_path, monkeypatch):
     over = make_chunk(0, text=" ".join(["expense"] * 400))
     assert FakeEmbeddingProvider().count_tokens(over.text) > MAX_WORD_PIECES
 
-    monkeypatch.setattr(builder, "load_from_manifest", lambda p: [doc])
+    monkeypatch.setattr(builder, "load_from_manifest", lambda p, **kw: [doc])
     monkeypatch.setattr(builder, "chunk_all", lambda docs, **kw: [over])
     monkeypatch.setattr(
         builder, "_get_provider", lambda cfg, offline: FakeEmbeddingProvider()
@@ -254,7 +254,7 @@ def test_the_builder_refuses_an_invalid_chunk_size(tmp_path, monkeypatch):
     from rag_bot.ingest import builder
 
     monkeypatch.setattr(
-        builder, "load_from_manifest", lambda p: [make_document("Expense ratio: 1.21")]
+        builder, "load_from_manifest", lambda p, **kw: [make_document("Expense ratio: 1.21")]
     )
     cfg = _cfg(tmp_path, chunk_tokens=400)
     with pytest.raises(builder.GuardFailure, match="invalid configuration"):
@@ -266,7 +266,7 @@ def test_a_dry_run_writes_nothing(tmp_path, monkeypatch, capsys):
     from rag_bot.ingest import builder
 
     doc = make_document("## Expense ratio\nExpense ratio: 1.21")
-    monkeypatch.setattr(builder, "load_from_manifest", lambda p: [doc])
+    monkeypatch.setattr(builder, "load_from_manifest", lambda p, **kw: [doc])
     monkeypatch.setattr(
         builder, "_get_provider", lambda cfg, offline: FakeEmbeddingProvider()
     )
