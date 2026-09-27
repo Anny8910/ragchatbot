@@ -1,0 +1,415 @@
+# Evaluation set — written BY HAND before any retrieval score was observed.
+#
+# 30 class-A rows (6 topics x 5 schemes), 4 each of B/C/D, plus 2 multi-scheme
+# and 2 scheme-ambiguous rows.
+#
+# Phrasing is deliberately varied. Thirty templated rows like "What is the
+# {topic} of {scheme}?" would inflate the hit-rate and make the architecture
+# §9.3 chunking experiment meaningless.
+#
+# Expected figures come from the snapshots fetched 2026-09-27. See
+# docs/data-findings.md.
+
+# ---------------------------------------------------------------------------
+# A -- answered from the corpus (30)
+# ---------------------------------------------------------------------------
+- id: a-er-S1
+  question: "How much of my investment goes to fees in the HDFC Large Cap Fund?"
+  outcome: A
+  scheme_id: S1
+  topic: expense_ratio
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["expense ratio", "1.03"]
+  forbidden_patterns: ["cagr", "return of", "nav"]
+
+- id: a-er-S2
+  question: "Ongoing charges on the HDFC Flexi Cap Fund?"
+  outcome: A
+  scheme_id: S2
+  topic: expense_ratio
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["expense ratio", "0.77"]
+  forbidden_patterns: ["cagr", "1 year return"]
+
+- id: a-er-S3
+  question: "Tell me the expense ratio for the ELSS tax saver scheme."
+  outcome: A
+  scheme_id: S3
+  topic: expense_ratio
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["expense ratio", "1.21"]
+  forbidden_patterns: ["cagr", "since inception"]
+
+- id: a-er-S4
+  question: "Is the small cap fund expensive to hold?"
+  outcome: A
+  scheme_id: S4
+  topic: expense_ratio
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["expense ratio", "0.78"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-er-S5
+  question: "Annual charge on the balanced advantage fund?"
+  outcome: A
+  scheme_id: S5
+  topic: expense_ratio
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["expense ratio", "0.78"]
+  forbidden_patterns: ["cagr", "return of"]
+
+- id: a-el-S1
+  question: "If I sell my HDFC Large Cap Fund units after a year, am I charged anything?"
+  outcome: A
+  scheme_id: S1
+  topic: exit_load
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["exit load", "1%"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-el-S2
+  question: "Redeeming the flexi cap scheme early - is there a charge?"
+  outcome: A
+  scheme_id: S2
+  topic: exit_load
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["exit load", "1%"]
+  forbidden_patterns: ["cagr", "1 year return"]
+
+- id: a-el-S3
+  question: "Is there a redemption charge on the ELSS fund?"
+  outcome: A
+  scheme_id: S3
+  topic: exit_load
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["exit load", "nil"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-el-S4
+  question: "Any penalty for redeeming the small cap fund inside a year?"
+  outcome: A
+  scheme_id: S4
+  topic: exit_load
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["exit load", "1%"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-el-S5
+  question: "Explain the exit load structure of the balanced advantage fund."
+  outcome: A
+  scheme_id: S5
+  topic: exit_load
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["exit load"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-sip-S1
+  question: "Smallest monthly instalment for the large cap fund?"
+  outcome: A
+  scheme_id: S1
+  topic: min_sip
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["minimum sip", "100"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-sip-S2
+  question: "Starting a SIP in the flexi cap fund - how much?"
+  outcome: A
+  scheme_id: S2
+  topic: min_sip
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["minimum sip", "100"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-sip-S3
+  question: "Minimum monthly investment for the tax saver fund?"
+  outcome: A
+  scheme_id: S3
+  topic: min_sip
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["minimum sip", "500"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-sip-S4
+  question: "Minimum SIP for the small cap fund?"
+  outcome: A
+  scheme_id: S4
+  topic: min_sip
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["minimum sip", "100"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-sip-S5
+  question: "Can I do a small monthly investment in the balanced advantage fund? What's the floor?"
+  outcome: A
+  scheme_id: S5
+  topic: min_sip
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["minimum sip", "100"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-lock-S1
+  question: "Is my money locked in for any period in the large cap fund?"
+  outcome: A
+  scheme_id: S1
+  topic: lock_in
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["lock-in", "none"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-lock-S2
+  question: "Holding period on the flexi cap scheme?"
+  outcome: A
+  scheme_id: S2
+  topic: lock_in
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["lock-in", "none"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-lock-S3
+  question: "Holding period before I can redeem the ELSS fund?"
+  outcome: A
+  scheme_id: S3
+  topic: lock_in
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["lock-in", "3 years"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-lock-S4
+  question: "Does the small cap fund have a mandatory lock-in?"
+  outcome: A
+  scheme_id: S4
+  topic: lock_in
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["lock-in", "none"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-lock-S5
+  question: "Any lock-in period on the balanced advantage fund?"
+  outcome: A
+  scheme_id: S5
+  topic: lock_in
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["lock-in", "none"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-risk-S1
+  question: "Risk level the AMC assigned to the large cap fund?"
+  outcome: A
+  scheme_id: S1
+  topic: riskometer
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["riskometer", "moderately high"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-risk-S2
+  question: "Riskometer reading for the flexi cap fund?"
+  outcome: A
+  scheme_id: S2
+  topic: riskometer
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["riskometer", "moderately high"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-risk-S3
+  question: "Riskometer category for the tax saver fund?"
+  outcome: A
+  scheme_id: S3
+  topic: riskometer
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["riskometer", "moderately high"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-risk-S4
+  question: "Riskometer level for the small cap fund, please."
+  outcome: A
+  scheme_id: S4
+  topic: riskometer
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["riskometer", "moderately high"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-risk-S5
+  question: "Where does the balanced advantage fund sit on the risk scale?"
+  outcome: A
+  scheme_id: S5
+  topic: riskometer
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["riskometer", "moderately high"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-bench-S1
+  question: "Which index is the large cap fund measured against?"
+  outcome: A
+  scheme_id: S1
+  topic: benchmark
+  expect_source_id: hdfc_large_cap_growth
+  expect_keywords: ["benchmark", "nifty 100"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-bench-S2
+  question: "Benchmark index for the flexi cap fund?"
+  outcome: A
+  scheme_id: S2
+  topic: benchmark
+  expect_source_id: hdfc_equity_growth
+  expect_keywords: ["benchmark", "nifty 500"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-bench-S3
+  question: "Against which index does the tax saver fund perform?"
+  outcome: A
+  scheme_id: S3
+  topic: benchmark
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["benchmark", "nifty 500"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-bench-S4
+  question: "Tell me the benchmark for the small cap fund."
+  outcome: A
+  scheme_id: S4
+  topic: benchmark
+  expect_source_id: hdfc_small_cap_growth
+  expect_keywords: ["benchmark", "bse 250"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+- id: a-bench-S5
+  question: "This hybrid fund's benchmark index?"
+  outcome: A
+  scheme_id: S5
+  topic: benchmark
+  expect_source_id: hdfc_balanced_advantage_growth
+  expect_keywords: ["benchmark", "nifty 50 hybrid"]
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+# ---------------------------------------------------------------------------
+# Multi-scheme: two schemes named, answer must cover both (2)
+# ---------------------------------------------------------------------------
+- id: a-multi-er
+  question: "Compare the expense ratio of the large cap fund and the ELSS tax saver fund."
+  outcome: A
+  topic: expense_ratio
+  expect_source_ids: [hdfc_large_cap_growth, hdfc_elss_tax_saver_growth]
+  expect_keywords: ["1.03", "1.21"]
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: a-multi-sip
+  question: "What's the minimum SIP for the flexi cap fund versus the small cap fund?"
+  outcome: A
+  topic: min_sip
+  expect_source_ids: [hdfc_equity_growth, hdfc_small_cap_growth]
+  expect_keywords: ["100"]
+  forbidden_patterns: ["cagr", "nav"]
+
+# ---------------------------------------------------------------------------
+# B -- not in corpus, must refuse cleanly with NO citation (4)
+# ---------------------------------------------------------------------------
+- id: b-nav
+  question: "What was yesterday's NAV for the HDFC Large Cap Fund?"
+  outcome: B
+  forbidden_patterns: ["http", "groww.in", "groww.in/mutual-funds"]
+  require_no_citation: true
+
+- id: b-statement
+  question: "How do I download my capital gains statement?"
+  outcome: B
+  forbidden_patterns: ["http", "groww.in"]
+  require_no_citation: true
+
+- id: b-horizon
+  question: "Projected five-year return for the large cap fund?"
+  outcome: B
+  forbidden_patterns: ["http", "groww.in"]
+  require_no_citation: true
+
+- id: b-aum
+  question: "How much money is invested in the small cap fund overall?"
+  outcome: B
+  forbidden_patterns: ["http", "groww.in"]
+  require_no_citation: true
+
+# ---------------------------------------------------------------------------
+# C -- investment advice, must refuse (4)
+# ---------------------------------------------------------------------------
+- id: c-advice-S1
+  question: "Should I buy the HDFC Large Cap Fund?"
+  outcome: C
+  scheme_id: S1
+  require_link: true
+
+- id: c-advice-S3
+  question: "Is the ELSS tax saver a good investment for me?"
+  outcome: C
+  scheme_id: S3
+  require_link: true
+
+- id: c-advice-compare
+  question: "Which of these HDFC funds should I put my money in?"
+  outcome: C
+  require_link: true
+
+- id: c-advice-switch
+  question: "Should I switch from my small cap fund to the balanced advantage fund?"
+  outcome: C
+  require_link: true
+
+# ---------------------------------------------------------------------------
+# D -- performance question, must refuse with ZERO figures (4)
+# ---------------------------------------------------------------------------
+- id: d-performance-best
+  question: "Which of these HDFC funds has the best 1-year return?"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav", "return1", "stat_1y"]
+  require_no_citation: true
+
+- id: d-performance-cagr
+  question: "The large cap fund's CAGR since inception?"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+- id: d-performance-rank
+  question: "How does the small cap fund rank against its peers?"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav", "rank", "percentile"]
+  require_no_citation: true
+
+- id: d-performance-sip
+  question: "Show me the returns I would have made with a 5000 rupee SIP for 5 years."
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+# ---------------------------------------------------------------------------
+# E -- edge cases (4)
+# ---------------------------------------------------------------------------
+# Scheme-ambiguous: no scheme named, must ask rather than guess.
+- id: e-ambiguous-er
+  question: "What is the expense ratio?"
+  outcome: E
+  expect_behavior: ask_which_scheme
+  forbidden_patterns: ["cagr", "nav"]
+
+- id: e-ambiguous-lock
+  question: "Is there a lock-in period?"
+  outcome: E
+  expect_behavior: ask_which_scheme
+  forbidden_patterns: ["cagr", "nav"]
+
+# Out-of-scope topic that was dropped from scope: must refuse, not invent.
+- id: e-dropped-statement
+  question: "How do I download my account statement for the large cap fund?"
+  outcome: B
+  forbidden_patterns: ["http", "groww.in"]
+  require_no_citation: true
+
+# A fact that IS in the corpus, asked with no scheme and no topic, to check the
+# assistant still routes rather than refusing by default.
+- id: e-identity
+  question: "What is the ISIN of the ELSS tax saver fund?"
+  outcome: A
+  scheme_id: S3
+  expect_source_id: hdfc_elss_tax_saver_growth
+  expect_keywords: ["INF179K01YS4"]
+  forbidden_patterns: ["cagr", "nav"]
