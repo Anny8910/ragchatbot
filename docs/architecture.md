@@ -572,6 +572,12 @@ is an in-scope *fact*, and "return" appears in "returns period" as an exit-load 
 test is in `tests/test_triage.py` and in the eval suite, and it is a release gate, not a
 nice-to-have.
 
+**Measured in P6 (`data-findings.md` §9.1):** 0 class-A false positives over all 33 class-A
+rows, and 9 of 9 labelled C/D rows plus 4 of 4 demo questions caught at layer 1. The same
+rules catch **0 of 11** advice/performance *paraphrases* ("rank these funds for me", "what's
+the safest option here") — which is the empirical case for layer 2 existing, and the reason
+its usage rate is reported after each demo run.
+
 ### 13.3 Refusal copy
 
 - **Class C:** acknowledge the question type, state the facts-only limit in one sentence, give

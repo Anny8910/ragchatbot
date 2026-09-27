@@ -18,24 +18,15 @@ from rag_bot.types import ScoredChunk
 # mark the answer as weakly evidenced instead of presenting it as solid.
 WEAK_MARGIN = 0.05
 
-# Topic label for the class-B copy. The refusal has to name what the assistant CAN
-# answer, because a refusal that says "not found" reads as broken while one that
-# says "not in these six topics" reads as scoped.
-TOPIC_LABELS: dict[str, str] = {
-    "expense_ratio": "expense ratio",
-    "exit_load": "exit load",
-    "min_sip": "minimum SIP",
-    "lock_in": "ELSS lock-in period",
-    "riskometer": "riskometer level",
-    "benchmark": "benchmark index",
-}
-
-# The six in-scope topics, in the order a reader wants them. `statement` is
-# deliberately absent: it was dropped from scope on 2026-09-27 because no source
-# carries statement-download guidance, and promising it in a refusal would state a
-# coverage the assistant does not have.
-DEFAULT_COVERED_TOPICS: tuple[str, ...] = (
-    "expense_ratio", "exit_load", "min_sip", "lock_in", "riskometer", "benchmark",
+# Topic label and the covered-topic list for the class-B copy live in
+# rag_bot/answer/refusals.py, which is the single source of truth. They used to be
+# defined here as well, which meant two copies of the same user-facing string and
+# a stale-copy bug when the topics changed. The re-export keeps the existing
+# `from rag_bot.retrieve.gate import DEFAULT_COVERED_TOPICS` call sites working.
+from rag_bot.answer.refusals import (  # noqa: F401
+    DEFAULT_COVERED_TOPICS,
+    TOPIC_LABELS,
+    refusal_b,
 )
 
 
@@ -58,21 +49,7 @@ def _class_b_message(covered_topics: list[str]) -> str:
     A class-B answer that cites a source would be worse than no answer: it would
     point the user at a page that does not contain what they asked for.
     """
-    labels = [TOPIC_LABELS.get(t, t.replace("_", " ")) for t in covered_topics]
-    if not labels:
-        return (
-            "I don't have that in the indexed sources. I can only answer from the "
-            "scheme pages I have indexed."
-        )
-    if len(labels) == 1:
-        listed = labels[0]
-    else:
-        listed = ", ".join(labels[:-1]) + f" and {labels[-1]}"
-    return (
-        "I don't have that in the indexed sources. I can only answer questions "
-        f"about {listed}, for these five HDFC schemes. I deliberately do not "
-        "carry returns, NAV or performance figures."
-    )
+    return refusal_b(covered_topics)[0]
 
 
 def evaluate(

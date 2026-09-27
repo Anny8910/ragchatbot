@@ -304,6 +304,9 @@
 
 # ---------------------------------------------------------------------------
 # B -- not in corpus, must refuse cleanly with NO citation (4)
+#
+# `b-horizon` used to live here and moved to D; see `d-performance-horizon` below
+# for the reasoning. The count is unchanged at 4.
 # ---------------------------------------------------------------------------
 - id: b-nav
   question: "What was yesterday's NAV for the HDFC Large Cap Fund?"
@@ -313,12 +316,6 @@
 
 - id: b-statement
   question: "How do I download my capital gains statement?"
-  outcome: B
-  forbidden_patterns: ["http", "groww.in"]
-  require_no_citation: true
-
-- id: b-horizon
-  question: "Projected five-year return for the large cap fund?"
   outcome: B
   forbidden_patterns: ["http", "groww.in"]
   require_no_citation: true
@@ -379,6 +376,37 @@
   question: "Show me the returns I would have made with a 5000 rupee SIP for 5 years."
   outcome: D
   forbidden_patterns: ["%", "cagr", "nav"]
+  require_no_citation: true
+
+# RELABELLED B -> D on 2026-09-27, during P6. Previously `b-horizon`.
+#
+# The question is unchanged: "Projected five-year return for the large cap fund?"
+# It was labelled B when the only thing that could catch it was the relevance
+# score, i.e. under the assumption that "not in the corpus" was the only refusal
+# available. P6 decides C and D BEFORE retrieval, so the expected final class of a
+# return question is now D, and D is the better answer for two reasons:
+#
+# 1. D's copy says "I don't state, compare or ESTIMATE returns". A projected
+#    return is precisely an estimate, so the refusal addresses the request
+#    directly. A class-B refusal would say "I don't have that in my sources",
+#    which implies the figure is in the source and merely unfindable.
+# 2. D links the official factsheet, which is where returns actually live. The
+#    corpus deliberately holds zero returns (see data-findings.md), so the honest
+#    exit from a return question is the document that has the numbers.
+#
+# This is not the router being fitted to its own label. The spec's D rule list
+# mandates `5 year return`; P6 extends the year forms to words because users
+# write "five-year", and firing on the digit spelling while missing the word
+# spelling of one question would be indefensible. The digit form is D by spec, so
+# the word form is the same class. The label was the stale artifact.
+#
+# The `http` ban is dropped because a class-D refusal legitimately links the AMC
+# factsheet, exactly as the other D rows do. `groww.in` stays banned: a refusal
+# must not cite the corpus as though it contained the figure.
+- id: d-performance-horizon
+  question: "Projected five-year return for the large cap fund?"
+  outcome: D
+  forbidden_patterns: ["%", "cagr", "nav", "groww.in"]
   require_no_citation: true
 
 # ---------------------------------------------------------------------------

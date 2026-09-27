@@ -403,15 +403,97 @@ direction: 12-digit and 4-4-4 Aadhaar numbers still carry their own label.
 
 ### 8.3 Known limits, stated rather than hidden
 
-- A deliberately spaced PAN (`ab cde 1234 f`) is not caught. Matching letter
-  runs with separators would put the PAN pattern close enough to ordinary prose
-  to be unsafe, which is the exact trade this phase is supposed to avoid.
+- A deliberately spaced PAN (`ab cde 1234 f`) is not caught. Matching letter runs
+  with separators would put the PAN pattern close enough to ordinary prose to be
+  unsafe, which is the exact trade this phase is supposed to avoid.
 - Keyword proximity is lexical, not semantic. A 6-digit run with no nearby
   keyword survives; the scrubber catches keywords, not intent.
 - `scrub()` guarantees no *pattern match* survives. It cannot guarantee the
   absence of PII in free text — only a keyword-less 4-6 digit number is a
   plausible miss, and the product's own answers look exactly like that, which is
   the deliberate trade.
+
+## 9. Triage router findings (P6)
+
+### 9.1 The release gate passes, and the interesting number is 0 of 11
+
+`class-A false positives: 0` over all 33 class-A rows — the number the spec calls
+the one that matters. It passes because the banned-keyword rule was treated as a
+hard constraint rather than a guideline: `risk`, `return`, `perform`, `better`,
+`invest` and `good` appear in no pattern except inside a longer phrase, so
+"Against which index does the tax saver fund perform?" and "Where does the
+balanced advantage fund sit on the risk scale?" both stay class A.
+
+The same rule set catches **9 of 9** labelled C/D rows and **4 of 4** prepared
+demo questions, all at `layer="rules"`, so the refusal demo costs zero LLM calls.
+
+But a paraphrase probe of 11 advice/performance questions the rules do *not*
+name — "which one made me the most money", "rank these funds for me", "what's
+the safest option here", "compare the performance of all five" — is caught **0 of
+11** by layer 1. That is the designed state rather than a defect, and it is the
+empirical justification for layer 2 existing at all: paraphrase recall is a
+tuning problem, not a product boundary. It is measured in a test that fails if the
+number moves, precisely so the rule list cannot be quietly over-fitted to the
+eval set — added paraphrase rules are the most likely way to break the class-A
+gate, and the gate is what protects required answers.
+
+### 9.2 Two rules the spec's list does not cover, both from labelled rows
+
+- **`d_rank_against_peers`.** "How does the small cap fund rank against its
+  peers?" matches none of `ranking`, `ranked` or `peer group rank`. The
+  preposition is required rather than adding bare `rank`, for the same reason
+  `risk` is banned: a comparative "rank" is a performance claim, but the word
+  alone is not worth the false-positive risk.
+- **`d_best_return`.** The spec's own example of a D-before-C case — "should I
+  buy the fund with the best returns" — contains no "perform" at all, so
+  `d_best_performing` misses it and it routes to C. That produces a no-advice
+  refusal that never mentions the request was for a figure, which is the precise
+  failure the two-class split exists to prevent.
+
+Year forms are extended to words (`five-year` as well as `5 year`) because
+firing on the digit spelling while missing the word spelling of one question would
+be indefensible.
+
+### 9.3 One eval label was wrong, and the evidence for moving it
+
+`b-horizon` ("Projected five-year return for the large cap fund?") was labelled B
+in P2 and is now D. The label predates pre-retrieval triage: it assumed "not in the
+corpus" was the only refusal available. With the router in place, D is the better
+answer on the merits, not merely the more convenient one.
+
+- D's copy says "I don't state, compare or **estimate** returns". A projected
+  return is precisely an estimate, so the refusal addresses the request. A class-B
+  refusal would say "I don't have that in my sources", implying the figure is in
+  the source and merely unfindable — which is false.
+- D links the official factsheet, which is where returns actually live. The corpus
+  deliberately holds zero returns, so the honest exit from a return question is the
+  document that has the numbers.
+
+This is not the router fitted to its own label. The spec mandates `5 year return`
+as a D rule; P6 extends it to word forms; therefore the word form is the same class
+and the label was the stale artifact. The gate was not weakened to accommodate it —
+the release gate is class-A false positives, and it is still 0.
+
+Note the asymmetry that remains, and it is deliberate: `b-nav` ("What was
+yesterday's NAV?") stays B. The PRD's own class-B example is a NAV lookup, the
+rules match only `nav of` and `current nav`, and B's copy already says returns and
+NAV are not carried. Adding bare `nav` would have been the easy move and would
+have moved a PRD-specified B row to D for no gain.
+
+### 9.4 Exact scheme matching fails safe, and that is the point
+
+A sweep of confusable phrasings — `largecap fund`, `flexicap fund`,
+`balancedadvantage`, `tax saver`, `flexi cap exit load`, `the large fund`,
+`growth fund` — resolves to `None` in every case, never to a wrong scheme. A
+further sweep confirms every string that *does* resolve resolves correctly.
+
+That is the whole safety argument for exact matching. A miss costs a
+disambiguation prompt listing the five schemes, which is a mildly annoying
+question. A fuzzy match costs a confident answer about the wrong fund, which is
+the error the PRD is named for. The invariant is asserted in both directions, and
+`test_registry_aliases_exclude_bare_category_words` asserts the alias *table* has
+not been re-polluted with bare category words — the mechanism, not just its
+current output.
 
 ---
 ## Unresolved — needs a human decision
