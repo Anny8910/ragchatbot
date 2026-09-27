@@ -25,14 +25,26 @@ endpoint, which returns `hdfc-balanced-advantage-fund-direct-growth` for the fun
 > **Deviation 1.** P1 registers the corrected slug and records the substitution in
 > the manifest `notes` column. The brief's URL is not silently replaced.
 
-### The "JS shell" heuristic would not have caught this
+### Neither heuristic catches this — only the status check does
 
 The P1 spec detects a dead source by checking for "under 200 characters of visible
-text". The Groww 404 page returns **38,950 bytes** of perfectly readable text
-("Page not found", nav, footer), so that heuristic passes it. Only an explicit HTTP
-status check catches this case.
+text". Measured against the brief's dead S5 URL:
 
-> **Deviation 2.** `fetch.py` must check the HTTP status code, not just content size.
+| Probe | Result | Verdict |
+|---|---|---|
+| HTTP status | `404` | **the only thing that catches it** |
+| Visible text after tag stripping | 1,919 chars | spec's "JS shell < 200 chars" rule **passes it** |
+| `__NEXT_DATA__` payload present | `True` | liveness probe **passes it** |
+| Response body size | 38,949 bytes | size rule **passes it** |
+
+The page is a fully-rendered "not found" page: nav, footer, and readable body text,
+served with an error status. So Groww serves a *soft-looking* 404 with enough
+structure to fool content-based checks. `fetch.py` therefore checks the status code
+first and treats it as authoritative; the content checks are only defence in depth
+and are not sufficient on their own.
+
+> **Deviation 2.** `fetch.py` must check the HTTP status code. Content-size and
+> `__NEXT_DATA__` checks cannot substitute for it.
 
 ---
 
@@ -182,19 +194,36 @@ factsheet. `scheme_info_link` is `null` everywhere. **Unresolved** — see below
   aborted at 112KB of a 453KB page. Use a ≥120s timeout and one retry.
 - **Send a browser User-Agent.** Requests get redirected/served differently without
   one.
-- **Size range:** ~450–500KB per page, so ~2.3MB of committed HTML for five
-  snapshots.
-- `nav_date` is `25-Sep-2026`, two days before this probe. This **answers PRD Q4**:
-  the fee figures are current as of the fetch date, so a provenance footer showing
-  `fetched_at` is accurate.
-- `nfo_risk` formatting is **inconsistent across pages**: S1 yields
-  `Moderately High Riskometer`, S3 yields `Moderately High`. Normalise by stripping a
-  trailing `Riskometer` or the two schemes will be phrased differently in the corpus.
+- **Size range:** 453–497KB for S1–S4, but **816KB for S5**, so a rough page-size
+  expectation must not be used as a sanity check. All five carry the same 97-key
+  schema.
+- `nav_date` is `25-Sep-2026` on all five, two days before this probe. This **answers
+  PRD Q4**: the fee figures are current as of the fetch date, so a provenance footer
+  showing `fetched_at` is accurate.
+- `nfo_risk` formatting is **inconsistent across pages**: S1/S4/S5 yield
+  `Moderately High Riskometer`, S2/S3 yield `Moderately High`. Normalise by stripping
+  a trailing `Riskometer` or two schemes will be phrased differently in the corpus.
+- **`exit_load` has three distinct shapes** across the five schemes, so P2 must not
+  assume a single format:
+  - S1/S2/S4: `Exit load of 1% if redeemed within 1 year` (some carry a trailing `\r\n`)
+  - S3: `Nil`
+  - S5: `Exit Load for units in excess of 15% of the investment, 1% will be charged
+    for redemption within …` — a *partial* load keyed to a 15% threshold, truncated
+    in this field
+- **`lock_in` is null on four of five schemes**; only S3 has
+  `{"years": 3, "months": 0, "days": 0}`. Render null as an explicit "None" so the
+  corpus can answer "is there a lock-in?" negatively rather than being silent.
+- **S2 has been rebranded.** The brief and PRD call it "HDFC Equity Fund"; the live
+  page reports `fund_name = "HDFC Flexi Cap Direct Plan-Growth"` and
+  `sub_category = "Flexi Cap"`. The alias table covers both names, and
+  `tests/test_sources.py::test_live_fund_name_resolves_for_every_snapshot` fails if
+  the live name stops being resolvable.
 - **Alias design is constrained by real values.** `amc` is `HDFC` for all five, so
-  bare `"HDFC"` must never be an alias (ambiguous across all five sources). S2 is
-  named `HDFC Equity Fund` while the others carry `Equity` category labels, so bare
-  `"equity"` must not be an alias either. Derive aliases from the observed `fund_name`
-  values, not from guesswork.
+  bare `"HDFC"` must never be an alias (ambiguous across all five sources). S1 and S4
+  carry `Equity` category labels while S2 is named `* Equity Fund` in the brief, so
+  bare `"equity"` must not be an alias either. S5's `sub_category` is
+  `Dynamic Asset Allocation` (its `category` is `Hybrid`), so bare
+  `"balanced advantage"` is safe as a *fund-name* fragment but not as a category.
 
 ---
 

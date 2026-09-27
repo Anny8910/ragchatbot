@@ -1,0 +1,88 @@
+# Source registry for the mutual-fund FAQ assistant.
+#
+# Publisher note: all five sources are source_tier "brief" because the URLs come
+# from the problem statement. PRD open question Q1 asks whether groww.in is an
+# acceptable publisher, or whether the corpus must come from the AMC/SEBI/AMFI.
+# That is unresolved and gates the PRD's own acceptance criteria. See
+# docs/data-findings.md.
+
+sources:
+  - source_id: hdfc_large_cap_growth
+    # Brief URL. Verified 200 on 2026-09-27.
+    url: https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth
+    publisher: groww.in
+    source_tier: brief
+    scheme_id: S1
+    scheme_name: "HDFC Large Cap Fund – Direct Growth"
+    # No factsheet PDF exists on any of the five pages (brochure_link is null
+    # and there are zero PDF links). P3 cannot fill this in from these sources.
+    factsheet_url: null
+    # "large cap" alone is EXCLUDED: it is this scheme's category label.
+    aliases: ["hdfc large cap fund", "large cap fund", "hdfc large cap", "hdfc large cap fund direct growth", "s1"]
+
+  - source_id: hdfc_equity_growth
+    # Brief URL. Verified 200 on 2026-09-27.
+    url: https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth
+    publisher: groww.in
+    source_tier: brief
+    scheme_id: S2
+    # The brief and PRD §4 call this "HDFC Equity Fund". That is the fund's
+    # former name. As fetched on 2026-09-27 the live page reports
+    #   fund_name     "HDFC Flexi Cap Direct Plan-Growth"
+    #   sub_category  "Flexi Cap"
+    # so HDFC has rebranded it. The brief's name is kept here for traceability
+    # to the source document, and the note below records the current name.
+    scheme_name: "HDFC Equity Fund – Direct Growth"
+    factsheet_url: null
+    # Aliases cover BOTH names, because a user may use either the current
+    # official name or the older one the brief uses.
+    #
+    # "equity" alone is EXCLUDED per architecture §14.4: it is not S2's category,
+    # but it appears in S1's and S4's category labels ("Equity Large Cap",
+    # "Equity Small Cap"), so it would be ambiguous. "equity fund" is safe
+    # because no other scheme is named "* Equity Fund".
+    #
+    # "flexi cap" alone is EXCLUDED: it is now S2's own sub_category label, so
+    # it is a bare category word. "flexi cap fund" is kept because it is the
+    # current official name and users do say it.
+    aliases: ["hdfc equity fund", "equity fund", "hdfc equity", "hdfc equity fund direct growth", "hdfc flexi cap fund", "flexi cap fund", "hdfc flexi cap", "flexi cap direct plan growth", "s2"]
+
+  - source_id: hdfc_elss_tax_saver_growth
+    # Brief URL. Verified 200 on 2026-09-27.
+    url: https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth
+    publisher: groww.in
+    source_tier: brief
+    scheme_id: S3
+    scheme_name: "HDFC ELSS Tax Saver Fund – Direct Growth"
+    factsheet_url: null
+    # S3 is the only ELSS scheme here, so "elss" is unambiguous on its own and
+    # is the phrasing users actually use. "tax saver fund" is equally distinctive.
+    aliases: ["hdfc elss tax saver fund", "hdfc elss", "elss tax saver fund", "tax saver fund", "hdfc tax saver fund", "elss", "s3"]
+
+  - source_id: hdfc_small_cap_growth
+    # Brief URL. Verified 200 on 2026-09-27.
+    url: https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth
+    publisher: groww.in
+    source_tier: brief
+    scheme_id: S4
+    scheme_name: "HDFC Small Cap Fund – Direct Growth"
+    factsheet_url: null
+    # "small cap" alone is EXCLUDED: it is this scheme's category label.
+    aliases: ["hdfc small cap fund", "small cap fund", "hdfc small cap", "hdfc small cap fund direct growth", "s4"]
+
+  - source_id: hdfc_balanced_advantage_growth
+    # DEVIATION: the brief's URL is
+    #   .../hdfc-balanced-advantage-fund-direct-plan-growth
+    # which returns HTTP 404. The brief appears to have copied S3's
+    # "-direct-plan-" suffix onto S5, which has no "-plan-" slug. The working URL
+    # below was confirmed twice: by direct fetch, and via Groww's own search
+    # endpoint. See docs/data-findings.md section 1.
+    url: https://groww.in/mutual-funds/hdfc-balanced-advantage-fund-direct-growth
+    publisher: groww.in
+    source_tier: brief
+    scheme_id: S5
+    scheme_name: "HDFC Balanced Advantage Fund – Direct Growth"
+    factsheet_url: null
+    # "balanced advantage" alone is EXCLUDED: it is this scheme's category label
+    # ("Hybrid Balanced Advantage"). "balanced advantage fund" is safe.
+    aliases: ["hdfc balanced advantage fund", "balanced advantage fund", "hdfc balanced advantage", "hdfc balanced advantage fund direct growth", "s5"]
