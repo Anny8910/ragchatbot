@@ -1,0 +1,39 @@
+# Pinned dependency set for the mutual-fund FAQ assistant.
+#
+# Target interpreter: CPython 3.12 (Homebrew python@3.12). The pins below were
+# resolved on macOS arm64 with pip 26.2.1 and are `pip freeze`-style exact pins.
+#
+# chromadb major version targeted: 1.x (chromadb==1.5.9).
+# API notes: 0.x -> 1.x renamed some client entry points; `rag_bot/index/store.py`
+# (P3) must use the 1.x client API.
+#
+# NOTE: transformers==5.17.0 is a major-version bump. sentence-transformers==6.1.0
+# is expected to work with it, but `all-MiniLM-L6-v2` loading is asserted in P3
+# (rag_bot/providers/minilm.py) rather than assumed.
+#
+# torch is pinned explicitly because it is the largest transitive dependency and
+# the one most likely to need a platform-specific wheel per machine.
+
+# --- index / retrieval ---
+chromadb==1.5.9
+sentence-transformers==6.1.0
+torch==2.14.0
+
+# --- UI ---
+streamlit==1.64.0
+
+# --- snapshot parsing (P1 fetch, P2 loaders) ---
+beautifulsoup4==4.15.0
+lxml==6.1.3
+pypdf==6.19.0
+
+# --- data / config ---
+pyyaml==6.0.3
+python-dotenv==1.2.3
+requests==2.34.2
+
+# --- LLM providers ---
+ollama==0.6.2
+
+# --- tests ---
+pytest==9.1.1

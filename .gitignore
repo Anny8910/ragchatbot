@@ -1,0 +1,15 @@
+# Secrets and generated state.
+# NOTE: data/corpus/snapshots/ is deliberately NOT ignored. Committed snapshots
+# are the reproducibility guarantee (architecture D4) and P1's gate.
+
+.env
+data/index/
+data/logs/
+__pycache__/
+*.pyc
+.venv/
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
