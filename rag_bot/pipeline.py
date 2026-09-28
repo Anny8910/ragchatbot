@@ -164,6 +164,27 @@ def answer_question(
             with _stage(latency, "retrieve"):
                 chunks = retrieve(redacted, k=cfg.top_k, scheme_id=None,
                                   embedder=embedder, store=store)
+
+            # The gate runs here too, not only on the answered path. Asking
+            # "which scheme?" about something the corpus does not cover at all
+            # ("what is the SEBI circular number for portfolio disclosure?")
+            # names no scheme, so the E branch below would claim the question
+            # was answerable-but-underspecified. PRD section 5 class B is the
+            # correct outcome: the fact is not in the five pages, and a
+            # disambiguation prompt would be a refusal that pretends the answer
+            # is one question away. Retrieval scored below the floor is the
+            # evidence for that, and it is the same evidence the answered path
+            # refuses on -- one rule, two call sites.
+            with _stage(latency, "gate"):
+                gate = evaluate(chunks, min_score=cfg.min_score,
+                                index_empty=store.count() == 0,
+                                covered_topics=list(DEFAULT_COVERED_TOPICS))
+            if gate.is_class_b:
+                return assemble(Outcome.B_NOT_IN_CORPUS, gate.message or "", chunks,
+                                k=cfg.top_k, top_score=gate.top_score,
+                                validation=Validation(), latency=latency,
+                                triage_layer=triage_layer, reason=gate.reason)
+
             names = [s.scheme_name for s in sources if s.scheme_id]
             with _stage(latency, "assemble"):
                 return assemble(Outcome.E_NEEDS_SCHEME,

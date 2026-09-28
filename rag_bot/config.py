@@ -108,10 +108,15 @@ def validate(cfg: Config) -> list[str]:
     Check: provider is known; ollama_host is a URL; min_score in [0,1];
     chunk_tokens <= 224 (headroom under the 256 word-piece cap, architecture §9.2);
     chunk_overlap < chunk_tokens. Never raises -- callers decide what to do.
+
+    Deliberately does NOT check the API key of a hosted provider. `GROQ_API_KEY`
+    and `OPENAI_API_KEY` belong to their provider classes, which raise a named
+    error at construction; validating a secret here would put it in a list that
+    gets printed to a screen and written to a log.
     """
     problems: list[str] = []
 
-    known_providers = {"ollama", "fake", "openai", "none"}
+    known_providers = {"ollama", "fake", "openai", "groq", "none"}
     if cfg.provider not in known_providers:
         problems.append(
             f"unknown RAG_PROVIDER {cfg.provider!r}; expected one of "

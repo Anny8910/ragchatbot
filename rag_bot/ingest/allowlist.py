@@ -241,7 +241,70 @@ _SECTION_ORDER: tuple[str, ...] = (
 # under their label instead of a `Label: value` row.
 _PROSE_FIELDS = {"description"}
 
+# --------------------------------------------------------------------------
+# Units for bare numeric fields
+# --------------------------------------------------------------------------
+# Groww's embedded JSON payload stores some values as unitless numbers whose unit
+# is carried by the FIELD NAME rather than the value:
+#
+#     "expense_ratio": "1.03"        (rendered by the page as "1.03%")
+#     "min_sip_investment": 500      (rendered by the page as "Rs 500")
+#
+# Extracted verbatim, the corpus said "Expense ratio: 1.03" and "Minimum SIP
+# amount: 500", and the LLM faithfully repeated those unitless numbers. That is
+# the product's headline answer delivered without its unit -- "the expense ratio
+# is 1.03" is not a complete fact, and a reader cannot tell a percentage from a
+# rupee amount.
+#
+# The unit is therefore attached here, in the extractor, rather than asked of the
+# model in the prompt. Two reasons, in order of importance:
+#
+# 1. It is corroborated by the SAME snapshot, not imported from outside. The page
+#    carries a second rendering of the same fact in its analysis blob --
+#    `analysis_desc: "Lower expense ratio: 1.03%"` -- so the % is the page's own
+#    rendering of the field being extracted, not an assumption. Groww displays
+#    minimums in rupees throughout, and the brief's own PII fixtures write
+#    "Minimum SIP is Rs 500".
+# 2. A unit in the prompt is a unit the model can silently decline to apply, or
+#    invent. Here it is in the indexed text, so it is embedded, retrieved, and
+#    cited along with the figure.
+#
+# SAFETY RULES, both load-bearing:
+#
+# - Applied ONLY when the value is a bare number -- an int, a float, or a string
+#   that is nothing but digits and separators. A value that already carries text
+#   ("1.03%", "Rs 500", "Nil", the free-text exit load) is passed through
+#   untouched, so a field is never double-suffixed. The distinction matters
+#   because the five pages disagree on shape: S1 stores `expense_ratio` as the
+#   string "1.03" while `min_sip_investment` is a real int.
+# - "%" only, never "p.a.". `FORBIDDEN_PATTERNS` blocks `p. a.` as a per-annum
+#   performance qualifier (see its entry), and the corpus must not grow a phrase
+#   the guard is designed to reject.
+#
+# These are the ONLY annotated fields. Any new numeric field is rendered
+# unitless until someone adds it here with the same evidence.
+_UNIT_SUFFIX: dict[str, str] = {
+    "expense_ratio": "%",
+    "base_expense_ratio": "%",
+}
+_CURRENCY_FIELDS: frozenset[str] = frozenset(
+    {"min_sip_investment", "min_investment_amount", "min_withdrawal"}
+)
+
+# A value that is nothing but a number: optional sign, digits, and thousands or
+# decimal separators. Anchored, so "1.03% per annum" and "1 year" both fail.
+_BARE_NUMBER = re.compile(r"^-?\d+(?:[.,]\d+)*$")
+
 _MISSING = object()
+
+
+def _annotate_unit(field_name: str, text: str) -> str:
+    """Attach the field's unit to a value already known to be a bare number."""
+    if field_name in _UNIT_SUFFIX:
+        return f"{text}{_UNIT_SUFFIX[field_name]}"
+    if field_name in _CURRENCY_FIELDS:
+        return f"Rs {text}"
+    return text
 
 
 def normalize_value(field_name: str, value: Any) -> Any:
@@ -257,6 +320,10 @@ def normalize_value(field_name: str, value: Any) -> Any:
       distinct shapes across the five schemes (time-based, "Nil", and a partial
       load keyed to a 15% threshold on S5). Whitespace is collapsed; the text
       itself is never reinterpreted.
+    - Bare numeric values for the fields in `_UNIT_SUFFIX` / `_CURRENCY_FIELDS`
+      are annotated with their unit, because the payload carries the unit in the
+      field name and not in the value. See the table's own comment for the
+      evidence and the two safety rules.
     """
     if value is _MISSING or value is None:
         return None
@@ -278,13 +345,19 @@ def normalize_value(field_name: str, value: Any) -> Any:
         return cleaned or value.strip()
 
     if isinstance(value, str):
-        return re.sub(r"\s+", " ", value).strip()
+        text = re.sub(r"\s+", " ", value).strip()
+        # A bare number in a string is still a bare number: S1 stores
+        # `expense_ratio` as the string "1.03" and S2 as a real float, and the
+        # unit belongs to the field either way.
+        if _BARE_NUMBER.match(text):
+            return _annotate_unit(field_name, text)
+        return text
 
     if isinstance(value, bool):
         return "Yes" if value else "No"
 
     if isinstance(value, (int, float)):
-        return str(value)
+        return _annotate_unit(field_name, str(value))
 
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
 

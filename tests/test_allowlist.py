@@ -329,3 +329,55 @@ def test_forbidden_patterns_list_is_nonempty_and_labelled():
     assert len(FORBIDDEN_PATTERNS) >= 8
     for _pattern, label in FORBIDDEN_PATTERNS:
         assert isinstance(label, str) and label
+
+
+# --- unit annotation on bare numeric fields ---------------------------------
+# Groww's payload carries the unit in the field NAME, not in the value
+# (`"expense_ratio": "1.03"`). Rendered verbatim, the corpus said "Expense
+# ratio: 1.03" and the model repeated the unitless number, which is the product's
+# headline answer delivered incomplete. See the _UNIT_SUFFIX table in
+# rag_bot/ingest/allowlist.py for the evidence that % is the page's own rendering.
+
+
+def test_expense_ratio_gets_a_percent_sign():
+    assert normalize_value("expense_ratio", "1.03") == "1.03%"
+    assert normalize_value("base_expense_ratio", 0.84) == "0.84%"
+
+
+def test_minimum_investments_get_a_currency_prefix():
+    for field in ("min_sip_investment", "min_investment_amount", "min_withdrawal"):
+        assert normalize_value(field, 500) == "Rs 500"
+
+
+def test_units_are_never_doubled_on_a_value_that_already_has_one():
+    """Only int/float is annotated. A string value has already been through the
+    string branch, so a field arriving as "1.03%" or "Nil" must survive intact."""
+    assert normalize_value("expense_ratio", "1.03%") == "1.03%"
+    assert normalize_value("expense_ratio", "Nil") == "Nil"
+    assert normalize_value("min_sip_investment", "Rs 500") == "Rs 500"
+
+
+def test_no_per_annum_qualifier_is_added():
+    """`FORBIDDEN_PATTERNS` blocks `p. a.` as a per-annum performance qualifier,
+    so the extractor must not grow a phrase its own guard would reject."""
+    out = normalize_value("expense_ratio", "1.03")
+    assert "p.a" not in out.lower() and "p. a." not in out.lower()
+    assert not scan_forbidden_patterns(out), scan_forbidden_patterns(out)
+
+
+def test_annotation_does_not_touch_unlisted_numeric_fields():
+    """Adding a numeric field must not silently inherit a unit. Unlisted fields
+    render bare until someone adds the evidence for them."""
+    assert normalize_value("portfolio_turnover", 18) == "18"
+
+
+def test_real_snapshots_render_units_everywhere_they_apply():
+    """End-to-end on the actual corpus, not a hand-built payload: a unit added to
+    the table but absent from a real render would be a silent regression."""
+    payloads = _payloads()
+    if not payloads:
+        pytest.skip("no snapshots; run the fetcher")
+    for source_id, p in payloads.items():
+        text = render_document_text(p)
+        assert re.search(r"Expense ratio: \S+%", text), source_id
+        assert re.search(r"Minimum SIP amount: Rs [\d,]+", text), source_id

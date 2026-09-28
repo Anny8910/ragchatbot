@@ -1,11 +1,33 @@
 """Config tests. No network, no model download."""
 from __future__ import annotations
 
+import dataclasses
 import os
 
+import dotenv
 import pytest
 
-from rag_bot.config import DEFAULTS, Config, load, validate
+from rag_bot.config import DEFAULTS, load, validate
+
+
+@pytest.fixture(autouse=True)
+def _isolate_from_ambient_config(monkeypatch):
+    """Make these tests depend on DEFAULTS and their own monkeypatches only.
+
+    `config.load()` calls `load_dotenv(override=False)` and then reads
+    `os.environ`, so without this a developer's `.env` becomes the subject under
+    test: `test_defaults_load_and_validate_clean` asserts on DEFAULTS while
+    actually reading whatever the local machine happens to have configured. That
+    made the suite pass on a clean checkout and fail in the developer's own
+    directory, which is the worst possible time for it to fail.
+
+    The release gate is "pytest green with no network and no model download". A
+    test that only passes when you have no `.env` is not that.
+    """
+    for key in list(os.environ):
+        if key.startswith("RAG_"):
+            monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(dotenv, "load_dotenv", lambda *a, **k: False)
 
 
 def test_defaults_load_and_validate_clean():
@@ -66,10 +88,38 @@ def test_validate_never_raises_on_garbage(monkeypatch):
 
 
 def test_load_works_without_dotenv(monkeypatch):
-    """The default build must run with no .env at all (architecture D3)."""
-    monkeypatch.delenv("RAG_PROVIDER", raising=False)
-    assert load().provider == DEFAULTS["RAG_PROVIDER"]
-    assert ".env" not in os.listdir(".") or True  # no hard dependency on it
+    """The default build must run with no .env at all (architecture D3).
+
+    Exercises the real fallback rather than asserting a tautology: `load_dotenv`
+    is made to raise, exactly as it would if python-dotenv were not installed,
+    and `load()` must still return usable DEFAULTS instead of propagating.
+    """
+
+    def _boom(*_a, **_k):
+        raise ImportError("no dotenv here")
+
+    monkeypatch.setattr(dotenv, "load_dotenv", _boom)
+    cfg = load()
+    assert cfg.provider == DEFAULTS["RAG_PROVIDER"]
+    assert validate(cfg) == []
+
+
+def test_validate_accepts_every_hosted_provider():
+    """`groq` joined `openai` as an OpenAI-compatible hosted provider.
+
+    Regression guard for the `known_providers` set: a provider that
+    `app.build_llm` handles but `validate` rejects makes the app refuse to start,
+    and one that `validate` accepts but `build_llm` does not makes it crash on
+    first use. Validating the set here is the cheap half of that contract.
+    """
+    for provider in ("ollama", "openai", "groq", "none", "fake"):
+        cfg = dataclasses.replace(load(), provider=provider)
+        assert not any("PROVIDER" in p for p in validate(cfg)), provider
+
+
+def test_validate_rejects_an_unknown_provider():
+    cfg = dataclasses.replace(load(), provider="mistral-local")
+    assert any("PROVIDER" in p for p in validate(cfg))
 
 
 def test_config_is_frozen():
