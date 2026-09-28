@@ -92,16 +92,30 @@ Constraint from the data:
 - never reject an answerable question → `min_score ≤ 0.397`
 - reject a not-in-corpus question → `min_score > 0.784` — **impossible**
 
-`RAG_MIN_SCORE` stays at **0.35**. It sits below every A row with 0.047 of margin
-and above the non-topical band (0.037–0.092), which is the only work it can do.
+`RAG_MIN_SCORE` stays at **0.35**.
 
-**0.40 was considered and rejected.** It would catch exactly one labeled B row
-(`b-statement`, 0.364) while leaving only 0.003 of margin below `a-lock-S2`
-(0.397) — a valid "Holding period on the flexi cap scheme?" question. Trading a
-certain false refusal of a real question for one adjacent-B catch is a bad deal,
-and 0.003 of margin would break on any corpus or model drift. Revisit only once
-the rule layer handles class B by pattern, at which point an aggressive floor
-costs nothing.
+Re-measured in P9 over the full 51-row set with the built rule router in place
+(`python3 -m rag_bot.eval.run_eval --calibrate`, `all-MiniLM-L6-v2`):
+
+| threshold | in-corpus accepted | out-of-corpus accepted | gap |
+|---|---|---|---|
+| 0.20–0.36 | 33/33 | 5/18 | 28 |
+| **0.38** | **33/33** | **4/18** | **29** |
+| 0.40 | 32/33 | 4/18 | 28 |
+| 0.52 | 31/33 | 3/18 | 28 |
+| 0.60 | 23/33 | 2/18 | 21 |
+
+The widest gap is at 0.38, and it is a gap of exactly one row: it rejects one
+out-of-corpus question that 0.35 accepts. The 0.20→0.36 plateau is flat, meaning
+the floor does nothing at all across that whole range — exactly as §3 predicted,
+now that the rule router handles the adjacent-B cases by pattern.
+
+**0.38 was still not adopted.** The gain is a single row, and it costs the entire
+margin below `a-lock-S2` (top-1 0.397) down to 0.017 — inside the noise of any
+corpus change. A threshold that buys one refusal by making a correct question
+one refactor away from a false refusal is a bad trade, so the number stays where
+§4's analysis put it. Recorded because the table above is the measurement, and
+"we measured it and declined" is a decision worth being able to audit.
 
 The build prints the floor next to the model that produced it, because a cosine
 threshold is meaningless without naming the embedding model.
@@ -131,10 +145,94 @@ from 3/10 before it). Both misses are S2, whose live name is *HDFC Flexi Cap
 Direct Plan-Growth* while the brief calls it *HDFC Equity Fund* — an alias
 resolution problem for §14.4, not an embedding problem.
 
-## 7. Open
+## 7. Head-to-head against the alternatives
 
-- The rule layer for class B/C/D is unbuilt (P6). Until it exists, the labeled B
-  rows would be answered from adjacent chunks. That is the known worst-case
-  failure and the reason P6 is not optional.
-- Per-chunking-strategy hit-rate (§9.3's full experiment) is deferred to the eval
-  harness (P9); §1 records why the chosen strategy was picked.
+§1 argues the strategy on mechanism. This is the measurement, over the 33
+in-corpus rows, all with the real embedder. "topic hit" = the rank-1 chunk
+carries the topic the row asks about; that is the quantity the strategy is
+supposed to protect, since `topic` is a retrieval filter dimension.
+
+| strategy | chunks | topic hit | note |
+|---|---|---|---|
+| **Section-aware, row-group units (chosen)** | **45** | **33/33** | label travels with its value |
+| Fixed 180 word-pieces | 61 | 26/33 | splits `Label: value` rows; 7 misses |
+| Whole-page per source | 5 | 12/33 | a page holds all six topics; the filter cannot discriminate |
+
+Whole-page is the instructive failure. Five beautiful, complete chunks, and a
+topic hit rate below a coin flip, because one chunk per scheme means
+`topic=exit_load` retrieves the same object as `topic=expense_ratio`. The cost
+of the chosen strategy is more chunks and a larger index; the benefit is that
+every topic stays independently addressable, which is what makes the whole
+scheme-scoped, topic-filtered design work at all.
+
+Overhead measured directly: the chosen strategy produces 9 chunks per source
+against 45, and the index rebuild takes 4.1s versus 2.3s for whole-page.
+
+## 8. Open
+
+- Per-chunking-strategy *end-to-end* class-A accuracy is not measured. §7 compares
+  topic hit-rate, which is the mechanism; running all three strategies through
+  the full pipeline with a real LLM would cost ~150 API calls per strategy and is
+  not yet justified by a 33-row set. The claim "chosen strategy is better" rests
+  on §7 and §1, not on an end-to-end number.
+- §7's table is measured against a 5-page corpus. Per-candidate topic hit-rate
+  will not transfer to a large corpus: at 5 pages a whole-page chunk is already
+  20% of the corpus, and the same strategy on 5,000 pages would be 5,000 chunks
+  of the same size with the same hit rate. The conclusion "keep the label with its
+  value" should transfer; the specific numbers should not be quoted elsewhere.
+- `a-bench-S5` ("This hybrid fund's benchmark index?") and the two multi-scheme
+  rows are labelled A in the eval set but route to class E, because they name no
+  scheme. That is the design working as specified — one scheme per question — and
+  the labels are being corrected to E rather than the router being loosened.
+
+
+## 8. Running the eval: one run per day on the free tier
+
+The Groq free tier enforces several limits at once: 8k tokens per minute, 1k
+requests per minute, 200k tokens per day, and a per-model cap. The binding one
+for a full eval is the **daily token budget**.
+
+A full 52-row run costs roughly 150k-200k tokens -- two calls per row (triage
+classify, then generation) at ~1.5k each, and reasoning tokens count towards the
+budget even at `reasoning_effort: "low"`. That is the whole daily allowance, so
+**a complete eval can be run about once per day**, and a partial one is not
+free: a retried 429 still spends tokens.
+
+Three things about this are worth writing down, because each one cost a run:
+
+1. **The daily cap is not in the response headers.** `x-ratelimit-remaining-tokens`
+   reads ~7900 of 8000 and resets in 547ms throughout the run, even while the
+   daily budget is spent. Pacing on those headers alone looks correct and gets
+   429'd anyway. The only place the daily window appears is the 429 body:
+   `on tokens per day (TPD): Limit 200000, Used 199945 ... Please try again in 17.8s`.
+2. **A daily 429 must not be retried.** The generic backoff honours the
+   `Retry-After` in that same message, so an 8-second reset gets retried and
+   fails again, and a 17-hour reset gets retried four times across seven
+   minutes of sleeping. `GroqProvider._post_with_backoff` now detects the daily
+   window in the body and raises immediately; a per-minute 429 is still retried,
+   because that one really does clear in seconds.
+3. **Reset durations are compound.** `17h57m7.2s` ends in "s", so a naive
+   `float(text[:-1])` reads it as 17 *seconds* -- 3800x too small, silently,
+   since the multi-unit branch is never reached. And "547ms" contains an "m",
+   so a substring test for the compound form reads it as 547 *minutes*. The
+   parser in `rag_bot/eval/run_eval.py` matches each form with its own anchored
+   regex; `tests/test_eval_runner.py` pins all four.
+
+### Using the runner
+
+```
+# a targeted re-check, which costs a few thousand tokens
+python -m rag_bot.eval.run_eval --only a-lock-S2,a-lock-S5
+
+# the full run: do this once, and only when the daily budget can cover it
+python -m rag_bot.eval.run_eval
+```
+
+The runner paces itself between rows from Groq's own rate-limit headers, tracks
+the tokens it has spent against `EVAL_DAILY_TOKENS` (default 200k), and exits 3
+with a partial-results note rather than printing a pass table over the rows that
+happened to run. The rows it skips are the ones most likely to fail, so a
+partial run reported as a pass would be worse than no run.
+
+To pay for more than one run a day, the options are a paid Groq tier, a second
+key, or shortening the run (`--only`).

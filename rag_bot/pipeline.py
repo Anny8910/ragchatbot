@@ -28,13 +28,14 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Any, Iterator
 
 from rag_bot.answer.assemble import assemble
 from rag_bot.answer.generator import generate_answer, retry_with_stricter_instruction
 from rag_bot.answer.prompts import build_disambiguation
 from rag_bot.answer.refusals import (
     DEFAULT_COVERED_TOPICS,
+    refusal_b,
     refusal_c,
     refusal_d,
 )
@@ -63,12 +64,24 @@ _ERROR_TEXT = (
 
 @contextmanager
 def _stage(latency: dict[str, float], name: str) -> Iterator[None]:
-    """Record a stage's wall time, including when it raises."""
+    """Record a stage's wall time in MILLISECONDS, including when it raises.
+
+    Milliseconds, not seconds, because both consumers assume ms: `ui.components
+    .render_timing` formats `f"{stage} {ms:.0f}ms"`, and `trace.build_record`
+    rounds each value to one decimal place. A seconds value here therefore
+    rendered as "generate 1ms" for a call that took 600ms -- a trace panel that
+    reports generation as instant, on the screen whose entire job is to show the
+    class what the pipeline actually did.
+
+    The `finally` is what makes a failing stage still appear: a stage that raised
+    is exactly the one worth seeing on the timeline.
+    """
     start = time.perf_counter()
     try:
         yield
     finally:
-        latency[name] = latency.get(name, 0.0) + (time.perf_counter() - start)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        latency[name] = latency.get(name, 0.0) + elapsed_ms
 
 
 def _source_for(sources: list[Source], scheme_id: str | None) -> Source | None:
@@ -93,6 +106,13 @@ def _error_answer(
     if exception is not None:
         logger.warning("answer_question failed: %s: %s",
                        type(exception).__name__, exception)
+        # A quota stop is not a bug and must not look like one. `reason` is a
+        # bare exception name, so an exhausted Groq budget and a genuine defect
+        # both surface as "error:HTTPError" -- indistinguishable to the eval
+        # runner, which kept going and reported the remaining rows as failures.
+        # Tagging it here is the only place the exception is in scope.
+        if "daily quota" in str(exception):
+            reason = f"{reason}:daily-quota"
     return assemble(
         Outcome.ERROR, _ERROR_TEXT, chunks,
         k=cfg.top_k,
@@ -149,6 +169,27 @@ def answer_question(
                     source.factsheet_url if source else None,
                 )
             return assemble(Outcome.D_PERFORMANCE_REFUSED, text, [],
+                            k=cfg.top_k, top_score=None, validation=Validation(),
+                            latency=latency, triage_layer=triage_layer,
+                            reason=triage.reason)
+
+        # Class B from the rule layer short-circuits here, before retrieval. The
+        # reason is measured, not stylistic: an administrative question about
+        # these pages scores ABOVE the relevance floor, because it is about the
+        # same subject matter. "How do I download my capital gains statement?"
+        # retrieves at 0.364 against a 0.35 floor, so without this it fell
+        # through to class E -- "which scheme do you mean?" -- to a question that
+        # names no scheme and cannot be made answerable by naming one.
+        #
+        # Retrieval is skipped deliberately, unlike the class-B gate path which
+        # still retrieves so the demo can show what was found. A rule-layer
+        # refusal knows the question is a download procedure before looking, and
+        # the retrieved chunks for a question about statements are the "Official
+        # sources" block, which shows nothing useful.
+        if triage.outcome is Outcome.B_NOT_IN_CORPUS:
+            with _stage(latency, "assemble"):
+                text, _url = refusal_b()
+            return assemble(Outcome.B_NOT_IN_CORPUS, text, [],
                             k=cfg.top_k, top_score=None, validation=Validation(),
                             latency=latency, triage_layer=triage_layer,
                             reason=triage.reason)
@@ -235,6 +276,17 @@ def answer_question(
                         asked_scheme_id=scheme_id)
 
         outcome, reason = _classify_validation(text, validation)
+        # A refusal reached through validation rather than through the gate has
+        # no copy of its own: `text` is empty precisely *because* the model said
+        # NOT_IN_INDEX or every sentence was stripped as a return figure. The
+        # gate path passes `refusal_b(...)` in, this path does not, so without
+        # this the user is shown a blank bubble with an icon beside it.
+        #
+        # Found by the eval set: rows b-aum and e-dropped-statement both produced
+        # an empty answer, which is the worst possible failure mode for a
+        # refusal -- it looks like the app is broken rather than declining.
+        if not text.strip() and outcome in _REFUSAL_COPY:
+            text = _REFUSAL_COPY[outcome](chunks, scheme_id)
         with _stage(latency, "assemble"):
             return assemble(outcome, text, chunks,
                             k=cfg.top_k,
@@ -246,6 +298,35 @@ def answer_question(
         return _error_answer(chunks, cfg=cfg, latency=latency,
                              reason=f"error:{type(exc).__name__}",
                              triage_layer=triage_layer, exception=exc)
+
+
+def _validation_refusal(outcome: Outcome, chunks: list[ScoredChunk],
+                        scheme_id: str | None) -> str:
+    """User-facing copy for a refusal that `validate` produced.
+
+    Keyed by outcome in `_REFUSAL_COPY`. Classes B and D only: C is decided
+    before generation, so its copy is built in the triage stage where the
+    question is still available in its original form.
+    """
+    if outcome is Outcome.B_NOT_IN_CORPUS:
+        return refusal_b()[0]
+    if outcome is Outcome.D_PERFORMANCE_REFUSED:
+        scheme_name = None
+        if scheme_id:
+            scheme_name = next(
+                (sc.chunk.scheme_name for sc in chunks if sc.chunk.scheme_id == scheme_id),
+                None,
+            )
+        return refusal_d(scheme_name, None)[0]
+    return ""
+
+
+_REFUSAL_COPY: dict[Outcome, Any] = {
+    Outcome.B_NOT_IN_CORPUS: lambda chunks, scheme_id: _validation_refusal(
+        Outcome.B_NOT_IN_CORPUS, chunks, scheme_id),
+    Outcome.D_PERFORMANCE_REFUSED: lambda chunks, scheme_id: _validation_refusal(
+        Outcome.D_PERFORMANCE_REFUSED, chunks, scheme_id),
+}
 
 
 def _classify_validation(text: str, validation: Validation) -> tuple[Outcome, str]:

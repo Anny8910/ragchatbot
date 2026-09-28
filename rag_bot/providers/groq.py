@@ -55,6 +55,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import time
 
 import requests
 
@@ -86,6 +88,60 @@ _FALLBACK_MODEL = "openai/gpt-oss-120b"
 # thinking a given prompt buys, so the retry has to have somewhere to stop.
 _RETRY_CEILING = 1024
 
+# Rate-limit backoff. The free tier allows a small number of requests per
+# minute, and an eval row costs two calls, so 51 rows is a burst that trips 429.
+# Geometric from 2s, capped at 30s, four attempts: about 2 + 4 + 8 = 14s of
+# waiting per call in the worst case, which is short enough that a slow run
+# stays watchable and long enough to clear a one-minute window in practice.
+_RATE_LIMIT_BACKOFF_S = (2.0, 4.0, 8.0, 16.0, 30.0)
+_MAX_RETRIES = 4
+
+# Retried: 429 (rate limited) and 5xx (upstream trouble). Not retried: 401/403
+# (the key is wrong, and retrying only delays that message) or 4xx like 400
+# (the payload is wrong, and a different payload is a bug, not a retry).
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+
+# Groq names the window in the 429 body but not in the headers: "tokens per day
+# (TPD)", "requests per day (RPD)", and the corresponding per-minute forms. Only
+# the daily ones are terminal -- a per-minute window clears in seconds, and
+# retrying is right.
+_DAILY_QUOTA = re.compile(r"on (tokens|requests) per day", re.IGNORECASE)
+_QUOTA_USED = re.compile(r"Used (\d+)", re.IGNORECASE)
+_QUOTA_LIMIT = re.compile(r"Limit (\d+)", re.IGNORECASE)
+_QUOTA_RETRY = re.compile(r"try again in ([0-9.]+)(ms|s|m|h)", re.IGNORECASE)
+
+
+def _daily_quota_error(body: str) -> str | None:
+    """A message for a 429 caused by a daily cap, or None for a normal one.
+
+    The message carries the numbers because they are the diagnosis: "429" on its
+    own reads as a bug in the harness, and "tokens per day: 199945 of 200000,
+    resets in 17h" reads as a quota that will be there tomorrow.
+    """
+    match = _DAILY_QUOTA.search(body or "")
+    if match is None:
+        return None
+    window = match.group(1).lower()
+    used = _QUOTA_USED.search(body)
+    limit = _QUOTA_LIMIT.search(body)
+    retry = _QUOTA_RETRY.search(body)
+    parts = [f"groq daily quota exhausted ({window} per day)"]
+    if used and limit:
+        parts.append(f"{used.group(1)} of {limit.group(1)} used")
+    if retry:
+        amount, unit = retry.group(1), retry.group(2).lower()
+        seconds = float(amount) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600}[unit]
+        # Labelled "shortest window", because that is what it is. The same 429
+        # body carries "try again in 2 min" while the daily budget it is really
+        # about does not reset for ~18 hours -- the value refers to the fastest
+        # window that must clear, and reading it as the answer to "when can I
+        # run again" is how an 18-hour wait becomes a 2-minute one.
+        parts.append(
+            f"shortest window clears in {seconds / 60:.0f} min"
+            if seconds >= 60 else f"shortest window clears in {seconds:.0f}s"
+        )
+    return "; ".join(parts) + " -- not retried, because retrying cannot help"
+
 
 class GroqProvider:
     """Talks to Groq's OpenAI-compatible chat completions endpoint.
@@ -116,6 +172,13 @@ class GroqProvider:
                 f"{_ENV_KEY} is not set. It is required only for "
                 "RAG_PROVIDER=groq; the local ollama provider needs no key."
             )
+        # Populated after every successful call. The eval runner reads these to
+        # pace itself: the free tier enforces several separate limits (per
+        # minute, per day, per model) and the binding one changes during a run,
+        # so a fixed sleep either wastes time under a limit that is not
+        # binding or gets 429'd by one that is.
+        self.last_headers: dict[str, str] = {}
+        self.last_total_tokens: int | None = None
 
     # -- request ---------------------------------------------------------
     def _post(self, system: str, user: str, *, temperature: float,
@@ -137,17 +200,18 @@ class GroqProvider:
             "max_tokens": max_tokens,
             "reasoning_effort": "low",
         }
-        response = requests.post(
-            f"{self.base_url}/chat/completions",
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=_TIMEOUT_S,
-        )
+        response = self._post_with_backoff(payload)
         response.raise_for_status()
         data = response.json()
+        # Exposed so a caller that runs many calls in a loop (the eval runner)
+        # can pace itself from Groq's own accounting rather than from a guess.
+        self.last_headers = {
+            k: v for k, v in response.headers.items()
+            if k.lower().startswith("x-ratelimit-")
+        }
+        total = (data.get("usage") or {}).get("total_tokens")
+        if isinstance(total, int):
+            self.last_total_tokens = total
         choices = data.get("choices") or []
         if not choices:
             return "", None
@@ -156,6 +220,77 @@ class GroqProvider:
         content = message.get("content")
         return (content if isinstance(content, str) else "",
                 choice.get("finish_reason"))
+
+    def _post_with_backoff(self, payload: dict) -> requests.Response:
+        """POST, retrying only the status codes that mean "ask again later".
+
+        The free Groq tier rate-limits per minute, and a single eval row costs
+        two calls (triage classify, then generation). Fifty-one rows therefore
+        arrives as a burst that trips 429 -- and because a 429 is an
+        `HTTPError`, the pipeline correctly turns it into an error answer, so
+        without this the eval reported a 22-row failure rate that was really
+        "the harness was too fast".
+
+        Only 429 and 5xx are retried. A 401 or 400 will fail identically on
+        every attempt, and retrying those just delays the message that actually
+        explains the problem. `Retry-After` is honoured when present, since
+        Groq sends it and it is more accurate than a guess.
+
+        A 429 that is really a DAILY quota is not retried at all. Groq reports
+        that only in the response body -- "Rate limit reached ... on tokens per
+        day (TPD): Limit 200000, Used 199945 ... Please try again in 7.776s"
+        -- and never in the headers, which keep reporting the per-minute window
+        as healthy. Retrying it obeys the `Retry-After` it asks for, so a 429
+        that clears in 8 seconds gets retried and fails again, and one that
+        clears in 17 hours gets retried 4 times across 7 minutes of sleeping
+        before surfacing. Both are wrong: the first wastes the retry, the second
+        is a hung process. So a body-quota 429 raises immediately, and its
+        message says what actually happened.
+        """
+        delay = _RATE_LIMIT_BACKOFF_S[0]
+        last_error: requests.HTTPError | None = None
+
+        for attempt in range(_MAX_RETRIES + 1):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    timeout=_TIMEOUT_S,
+                )
+            except requests.Timeout:
+                # A timeout is a network symptom, so it is retried on the same
+                # terms as a 5xx. The request may still have been processed,
+                # but these are short generations and a duplicate is cheaper
+                # than a failed eval row.
+                last_error = requests.Timeout(
+                    f"groq did not respond within {_TIMEOUT_S}s")
+            else:
+                if response.status_code not in _RETRYABLE_STATUS:
+                    return response
+                last_error = requests.HTTPError(
+                    f"{response.status_code} from groq", response=response)
+                if response.status_code == 429:
+                    if (quota := _daily_quota_error(response.text)) is not None:
+                        raise requests.HTTPError(quota, response=response)
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after and retry_after.isdigit():
+                        delay = int(retry_after)
+
+            if attempt == _MAX_RETRIES:
+                break
+            logger.warning(
+                "groq %s (attempt %d/%d); sleeping %.1fs",
+                last_error, attempt + 1, _MAX_RETRIES + 1, delay,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, _RATE_LIMIT_BACKOFF_S[-1])
+
+        assert last_error is not None
+        raise last_error
 
     def _chat(self, system: str, user: str, *, temperature: float,
               max_tokens: int) -> str:

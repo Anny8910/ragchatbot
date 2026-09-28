@@ -311,8 +311,15 @@ def normalize_value(field_name: str, value: Any) -> Any:
     """Normalise the three value shapes that are not already display-ready.
 
     - `lock_in` is a dict of {years, months, days}, all-null on four of the five
-      schemes. Rendered as an explicit "None" so the corpus can answer "is there
+      schemes. Rendered as an explicit "Nil" so the corpus can answer "is there
       a lock-in?" negatively instead of being silent on it.
+      "Nil", not "None": the pages use "Nil" for absence on `exit_load` already,
+      and a bare "None" reads to the model as a null sentinel -- a field that was
+      never populated -- rather than as the answer. Measured: "Lock-in period:
+      None" at a 0.397 score produced NOT_IN_INDEX, while the same chunk at
+      0.696 was answered correctly, so the ambiguity cost accuracy only in the
+      band near the floor, which is exactly where an eval that scores 90% lives.
+      "Nil" is the corpus's own word for "this is the value".
     - `nfo_risk` is inconsistently formatted across pages: S1/S4/S5 say
       "Moderately High Riskometer", S2/S3 say "Moderately High". The trailing
       "Riskometer" is stripped so all five schemes are phrased identically.
@@ -336,7 +343,7 @@ def normalize_value(field_name: str, value: Any) -> Any:
             n = value.get(key)
             if isinstance(n, int) and n > 0:
                 parts.append(f"{n} {unit}" + ("s" if n != 1 else ""))
-        return ", ".join(parts) if parts else "None"
+        return ", ".join(parts) if parts else "Nil"
 
     if field_name == "nfo_risk" and isinstance(value, str):
         cleaned = re.sub(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import time
 
 import pytest
 import requests
@@ -27,10 +28,12 @@ from rag_bot.providers.base import LLMProvider
 class _Response:
     """Minimal stand-in for `requests.Response`."""
 
-    def __init__(self, payload: dict, status: int = 200):
+    def __init__(self, payload: dict, status: int = 200,
+                 headers: dict | None = None):
         self._payload = payload
         self.status_code = status
         self.text = json.dumps(payload)
+        self.headers = headers or {}
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
@@ -220,14 +223,199 @@ def test_truncation_with_real_content_is_not_retried(monkeypatch):
     assert calls == [256]
 
 
-def test_http_error_propagates(monkeypatch):
+@pytest.mark.parametrize("status", [400, 401, 403, 404])
+def test_client_error_propagates_immediately(monkeypatch, status):
     """The pipeline turns an exception into a class ERROR answer that still shows
     the retrieved chunks. Swallowing it here would present an outage as the
-    assistant having nothing to say."""
+    assistant having nothing to say.
+
+    4xx is not retried: a wrong key or a malformed payload fails identically
+    every time, so retrying only delays the message that explains the problem.
+    The single-attempt assertion is the point -- a retry loop around a 401 turns
+    a one-line fix into a 14-second wait times four."""
+    attempts = []
     monkeypatch.setattr(requests, "post",
-                        lambda *a, **k: _Response({"error": "rate limited"},
-                                                  status=429))
+                        lambda *a, **k: attempts.append(k)
+                        or _Response({"error": "nope"}, status=status))
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
 
     with pytest.raises(requests.HTTPError):
         GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
                                                       max_tokens=8)
+    assert len(attempts) == 1, f"{status} was retried {len(attempts)} times"
+
+
+def test_rate_limit_is_retried_then_succeeds(monkeypatch):
+    """A 429 must be retried, not reported as a failure.
+
+    This was a real failure mode, not a hypothetical: the free Groq tier
+    rate-limits per minute and an eval row costs two calls, so the 51-row eval
+    tripped 429 partway through. Because a 429 is an HTTPError the pipeline
+    correctly turned it into an error answer, and the eval report showed a
+    22-row failure rate that was really "the harness ran too fast".
+    """
+    responses = [_Response({"error": "rate limited"}, status=429,
+                           headers={"Retry-After": "0"}),
+                 _Response(_completion("Exit load: 1%."))]
+
+    def fake_post(*a, **k):
+        return responses.pop(0)
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+    out = GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                         max_tokens=8)
+    assert out == "Exit load: 1%."
+    assert not responses, "the retry did not happen"
+
+
+def test_retry_after_header_is_honoured(monkeypatch):
+    """Groq sends `Retry-After`, and it is more accurate than a guessed backoff."""
+    slept: list[float] = []
+    responses = [_Response({"error": "rate limited"}, status=429,
+                           headers={"Retry-After": "7"}),
+                 _Response(_completion("ok"))]
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: responses.pop(0))
+    monkeypatch.setattr(time, "sleep", slept.append)
+
+    GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                  max_tokens=8)
+    assert 7.0 in slept, slept
+
+
+def test_rate_limit_gives_up_after_the_bounded_number_of_attempts(monkeypatch):
+    """Bounded, so a rate limit cannot turn into a hung demo: the exception still
+    reaches the pipeline, which reports it as a class ERROR answer."""
+    attempts = []
+    monkeypatch.setattr(requests, "post",
+                        lambda *a, **k: attempts.append(1)
+                        or _Response({"error": "rate limited"}, status=429))
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+    with pytest.raises(requests.HTTPError):
+        GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                      max_tokens=8)
+    assert len(attempts) == 5, len(attempts)   # 1 + 4 retries
+
+
+def test_server_error_is_retried(monkeypatch):
+    """5xx is upstream trouble rather than a bad request, so it is worth
+    retrying on the same terms as a 429."""
+    responses = [_Response({"error": "bad gateway"}, status=502),
+                 _Response(_completion("ok"))]
+    monkeypatch.setattr(requests, "post", lambda *a, **k: responses.pop(0))
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+    assert GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                          max_tokens=8) == "ok"
+
+
+def test_timeout_is_retried(monkeypatch):
+    """A timeout is a network symptom, so retrying is right. These are short
+    generations, so a duplicate is cheaper than a failed row."""
+    calls = []
+
+    def fake_post(*a, **k):
+        calls.append(1)
+        if len(calls) == 1:
+            raise requests.Timeout("timed out")
+        return _Response(_completion("ok"))
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+    assert GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                          max_tokens=8) == "ok"
+
+
+def test_rate_limit_headers_are_exposed_after_a_call(monkeypatch):
+    """The eval runner paces itself from these, so the provider has to keep
+    them. They are the only way to know which of Groq's several limits is the
+    binding one during a long run."""
+    response = _Response(
+        _completion("ok"),
+        headers={"x-ratelimit-remaining-tokens": "7900",
+                 "x-ratelimit-reset-tokens": "547ms",
+                 "content-type": "application/json"},
+    )
+    monkeypatch.setattr(requests, "post", lambda *a, **k: response)
+
+    provider = GroqProvider(model="m", api_key="k")
+    provider.generate("s", "u", temperature=0.0, max_tokens=8)
+
+    assert provider.last_headers["x-ratelimit-remaining-tokens"] == "7900"
+    # Non-rate-limit headers are not carried, so a caller cannot come to depend
+    # on anything but the accounting.
+    assert "content-type" not in provider.last_headers
+
+
+def test_last_headers_exist_before_any_call():
+    """The eval runner reads this attribute between rows, so a provider that has
+    not made a call yet must not raise on it."""
+    provider = GroqProvider(model="m", api_key="k")
+    assert provider.last_headers == {}
+    assert provider.last_total_tokens is None
+
+
+_DAILY_BODY = (
+    "Rate limit reached for model `openai/gpt-oss-120b` in organization `org_1` "
+    "service tier `on_demand` on tokens per day (TPD): Limit 200000, Used "
+    "199945, Requested 73. Please try again in 17.8s."
+)
+
+
+def test_daily_quota_429_is_not_retried(monkeypatch):
+    """A daily cap is not a rate to back off from.
+
+    Groq reports it only in the body, and the headers keep advertising the
+    per-minute window as healthy. So the generic 429 path honours the 8-second
+    `Retry-After`, retries, fails again, and spends four attempts and seven
+    minutes of sleeping before surfacing a message that still says "429". This
+    is the case that turned an eval run into a hang.
+    """
+    attempts = []
+    monkeypatch.setattr(requests, "post", lambda *a, **k: attempts.append(1)
+                        or _Response({"error": _DAILY_BODY}, status=429))
+    monkeypatch.setattr(time, "sleep", lambda _s: pytest.fail("slept on a daily cap"))
+
+    with pytest.raises(requests.HTTPError) as excinfo:
+        GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                      max_tokens=8)
+
+    assert len(attempts) == 1
+    message = str(excinfo.value)
+    assert "daily quota" in message
+    assert "199945 of 200000" in message
+
+
+def test_daily_quota_message_reports_the_reset_delay():
+    from rag_bot.providers.groq import _daily_quota_error
+
+    hours = _daily_quota_error(
+        "on tokens per day (TPD): Limit 200000, Used 199945. "
+        "Please try again in 17h57m7.2s."
+    )
+    assert "1020 min" in hours
+    minutes = _daily_quota_error(
+        "on requests per day (RPD): Limit 1000, Used 999. Please try again in 2.5m."
+    )
+    assert "2 min" in minutes
+
+
+def test_per_minute_429_is_still_retried(monkeypatch):
+    """Only the DAILY windows are terminal. A per-minute cap clears in seconds,
+    and retrying is exactly right -- treating it as terminal would turn a
+    recoverable blip into a hard failure."""
+    responses = [_Response({"error": "Rate limit reached ... on tokens per "
+                                     "minute: Limit 8000"}, status=429),
+                 _Response(_completion("ok"))]
+    attempts = []
+    monkeypatch.setattr(requests, "post",
+                        lambda *a, **k: attempts.append(1) or responses.pop(0))
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+
+    assert GroqProvider(model="m", api_key="k").generate("s", "u", temperature=0.0,
+                                                          max_tokens=8) == "ok"
+    assert len(attempts) == 2

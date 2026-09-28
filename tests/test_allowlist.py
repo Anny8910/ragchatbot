@@ -235,7 +235,7 @@ def test_lock_in_renders_years():
 def test_lock_in_renders_none_when_absent():
     """Four of five schemes have no lock-in. It must render explicitly so the
     corpus can answer 'is there a lock-in?' negatively."""
-    assert normalize_value("lock_in", {"years": None, "months": None, "days": None}) == "None"
+    assert normalize_value("lock_in", {"years": None, "months": None, "days": None}) == "Nil"
     assert normalize_value("lock_in", None) is None
 
 
@@ -310,7 +310,7 @@ def test_lock_in_none_is_present_in_text():
         pytest.skip("no snapshots; run the fetcher")
     s1 = payloads.get("hdfc_large_cap_growth")
     if s1:
-        assert "Lock-in period: None" in render_document_text(s1)
+        assert "Lock-in period: Nil" in render_document_text(s1)
 
 
 def test_factsheet_url_is_absent_but_amc_site_is_present():

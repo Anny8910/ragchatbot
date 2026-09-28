@@ -271,6 +271,7 @@ def test_retrieve_never_raises_on_a_broken_store(store, embedder):
     ("how volatile is it", "riskometer"),
     ("which index does it track", "benchmark"),
     ("how much is the minimum", "minimum SIP"),
+    ("holding period on the flexi cap scheme?", "lock in"),
 ])
 def test_synonyms_reach_the_corpus_vocabulary(query, expected):
     assert expected.lower() in expand_query(query).lower()

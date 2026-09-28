@@ -199,6 +199,28 @@ class Store:
     def count(self) -> int:
         return self._collection.count()
 
+    def iter_all_chunks(self):
+        """Yield every indexed chunk, rehydrated, in whatever order Chroma gives.
+
+        For whole-corpus audits -- the 256 word-piece cap, orphan checks -- where
+        the answer depends on all of the data and not on any one query. Chroma's
+        paginated `get()` rather than an unbounded `get()`: the corpus is small
+        now, but an unbounded call on a large index is how an audit tool becomes
+        the thing that runs the service out of memory.
+        """
+        offset, limit = 0, 500
+        total = self._collection.count()
+        while offset < total:
+            batch = self._collection.get(
+                limit=limit, offset=offset, include=["documents", "metadatas"]
+            )
+            docs = batch.get("documents") or []
+            if not docs:
+                return
+            for doc, meta, cid in zip(docs, batch.get("metadatas") or [], batch.get("ids") or []):
+                yield _rehydrate(meta, doc, cid)
+            offset += limit
+
     def all_ids(self) -> set[str]:
         return set(self._collection.get(include=[])["ids"])
 

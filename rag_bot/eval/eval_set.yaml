@@ -64,7 +64,19 @@
   scheme_id: S1
   topic: exit_load
   expect_source_id: hdfc_large_cap_growth
-  expect_keywords: ["exit load", "1%"]
+  # The snapshot says "Exit load of 1% if redeemed WITHIN 1 year". The question
+  # asks about redeeming AFTER a year, so the correct answer is that there is no
+  # charge -- the 1% does not apply. The label originally required "1%" here,
+  # which made a correct answer ("no exit load after one year") score as a
+  # failure. Requiring the figure the question does not ask about rewards
+  # reciting a number out of context.
+  expect_keywords: ["exit load"]
+  # "not be charged" added after the P9 run: the model writes "you would not be
+  # charged an exit load", which is the same fact as "no exit load" but is not a
+  # substring of any of the other six. The group stays negation-only -- an
+  # answer that merely mentions the 1% load without denying it for this case
+  # fails every option here.
+  expect_any_of: [["no exit load", "not charge", "not charged", "not be charged", "no charge", "nil", "zero", "not applicable"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-el-S2
@@ -82,7 +94,11 @@
   scheme_id: S3
   topic: exit_load
   expect_source_id: hdfc_elss_tax_saver_growth
-  expect_keywords: ["exit load", "nil"]
+  # The ELSS page prints "Nil" (and "Exit load is zero" in its JSON). An answer
+  # saying "no redemption charge" is the same fact in English, so the group
+  # accepts either wording rather than demanding the corpus's exact token.
+  expect_keywords: ["exit load"]
+  expect_any_of: [["nil", "no exit load", "no redemption charge", "no charge", "zero", "not charge", "not charged"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-el-S4
@@ -109,7 +125,9 @@
   scheme_id: S1
   topic: min_sip
   expect_source_id: hdfc_large_cap_growth
-  expect_keywords: ["minimum sip", "100"]
+  # See a-sip-S3: amount is the fact, noun phrase is vocabulary.
+  expect_keywords: ["100"]
+  expect_any_of: [["minimum sip", "monthly investment", "monthly amount", "sip amount", "sip"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-sip-S2
@@ -118,7 +136,9 @@
   scheme_id: S2
   topic: min_sip
   expect_source_id: hdfc_equity_growth
-  expect_keywords: ["minimum sip", "100"]
+  # See a-sip-S3: amount is the fact, noun phrase is vocabulary.
+  expect_keywords: ["100"]
+  expect_any_of: [["minimum sip", "monthly investment", "monthly amount", "sip amount", "sip"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-sip-S3
@@ -127,7 +147,13 @@
   scheme_id: S3
   topic: min_sip
   expect_source_id: hdfc_elss_tax_saver_growth
-  expect_keywords: ["minimum sip", "500"]
+  # The amount is the fact and stays a hard keyword. "minimum sip" as a phrase is
+  # vocabulary: the model writes "minimum monthly investment (SIP amount) is
+  # Rs 500", which is the same fact. The concept check moves to `expect_any_of`
+  # so a wrong amount still fails, and an answer that gives no concept at all
+  # ("Rs 500") also fails.
+  expect_keywords: ["500"]
+  expect_any_of: [["minimum sip", "monthly investment", "monthly amount", "sip amount", "sip"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-sip-S4
@@ -136,7 +162,9 @@
   scheme_id: S4
   topic: min_sip
   expect_source_id: hdfc_small_cap_growth
-  expect_keywords: ["minimum sip", "100"]
+  # See a-sip-S3: amount is the fact, noun phrase is vocabulary.
+  expect_keywords: ["100"]
+  expect_any_of: [["minimum sip", "monthly investment", "monthly amount", "sip amount", "sip"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-sip-S5
@@ -145,7 +173,9 @@
   scheme_id: S5
   topic: min_sip
   expect_source_id: hdfc_balanced_advantage_growth
-  expect_keywords: ["minimum sip", "100"]
+  # See a-sip-S3: amount is the fact, noun phrase is vocabulary.
+  expect_keywords: ["100"]
+  expect_any_of: [["minimum sip", "monthly investment", "monthly amount", "sip amount", "sip"]]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-lock-S1
@@ -154,7 +184,20 @@
   scheme_id: S1
   topic: lock_in
   expect_source_id: hdfc_large_cap_growth
-  expect_keywords: ["lock-in", "none"]
+  # Two groups, because the fact here is a NEGATION and a single keyword list
+  # cannot check one. The first group is the concept, the second is the denial.
+  # Both are required, so "There is no such fund" cannot pass on its "no", and
+  # "the lock-in is 3 years" cannot pass on its "lock-in" alone.
+  #
+  # This row previously demanded the literal token "lock-in" and failed a
+  # correct answer -- "Your money is not locked in for any period" -- because the
+  # model wrote the unhyphenated gerund. "Nil" is a group member rather than a
+  # hard keyword for the same reason: the corpus token is one of several correct
+  # ways to state the denial, and pinning it made the label measure wording.
+  expect_keywords: []
+  expect_any_of:
+    - ["lock-in", "locked in", "lock in", "lockin", "holding period", "mandatory lock"]
+    - ["nil", "no lock-in", "not locked in", "not lock in", "no lock", "no mandatory lock", "no minimum holding period", "not applicable"]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-lock-S2
@@ -163,7 +206,20 @@
   scheme_id: S2
   topic: lock_in
   expect_source_id: hdfc_equity_growth
-  expect_keywords: ["lock-in", "none"]
+  # Two groups, because the fact here is a NEGATION and a single keyword list
+  # cannot check one. The first group is the concept, the second is the denial.
+  # Both are required, so "There is no such fund" cannot pass on its "no", and
+  # "the lock-in is 3 years" cannot pass on its "lock-in" alone.
+  #
+  # This row previously demanded the literal token "lock-in" and failed a
+  # correct answer -- "Your money is not locked in for any period" -- because the
+  # model wrote the unhyphenated gerund. "Nil" is a group member rather than a
+  # hard keyword for the same reason: the corpus token is one of several correct
+  # ways to state the denial, and pinning it made the label measure wording.
+  expect_keywords: []
+  expect_any_of:
+    - ["lock-in", "locked in", "lock in", "lockin", "holding period", "mandatory lock"]
+    - ["nil", "no lock-in", "not locked in", "not lock in", "no lock", "no mandatory lock", "no minimum holding period", "not applicable"]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-lock-S3
@@ -181,7 +237,20 @@
   scheme_id: S4
   topic: lock_in
   expect_source_id: hdfc_small_cap_growth
-  expect_keywords: ["lock-in", "none"]
+  # Two groups, because the fact here is a NEGATION and a single keyword list
+  # cannot check one. The first group is the concept, the second is the denial.
+  # Both are required, so "There is no such fund" cannot pass on its "no", and
+  # "the lock-in is 3 years" cannot pass on its "lock-in" alone.
+  #
+  # This row previously demanded the literal token "lock-in" and failed a
+  # correct answer -- "Your money is not locked in for any period" -- because the
+  # model wrote the unhyphenated gerund. "Nil" is a group member rather than a
+  # hard keyword for the same reason: the corpus token is one of several correct
+  # ways to state the denial, and pinning it made the label measure wording.
+  expect_keywords: []
+  expect_any_of:
+    - ["lock-in", "locked in", "lock in", "lockin", "holding period", "mandatory lock"]
+    - ["nil", "no lock-in", "not locked in", "not lock in", "no lock", "no mandatory lock", "no minimum holding period", "not applicable"]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-lock-S5
@@ -190,7 +259,20 @@
   scheme_id: S5
   topic: lock_in
   expect_source_id: hdfc_balanced_advantage_growth
-  expect_keywords: ["lock-in", "none"]
+  # Two groups, because the fact here is a NEGATION and a single keyword list
+  # cannot check one. The first group is the concept, the second is the denial.
+  # Both are required, so "There is no such fund" cannot pass on its "no", and
+  # "the lock-in is 3 years" cannot pass on its "lock-in" alone.
+  #
+  # This row previously demanded the literal token "lock-in" and failed a
+  # correct answer -- "Your money is not locked in for any period" -- because the
+  # model wrote the unhyphenated gerund. "Nil" is a group member rather than a
+  # hard keyword for the same reason: the corpus token is one of several correct
+  # ways to state the denial, and pinning it made the label measure wording.
+  expect_keywords: []
+  expect_any_of:
+    - ["lock-in", "locked in", "lock in", "lockin", "holding period", "mandatory lock"]
+    - ["nil", "no lock-in", "not locked in", "not lock in", "no lock", "no mandatory lock", "no minimum holding period", "not applicable"]
   forbidden_patterns: ["cagr", "nav"]
 
 - id: a-risk-S1
@@ -274,32 +356,64 @@
   expect_keywords: ["benchmark", "bse 250"]
   forbidden_patterns: ["cagr", "nav", "%"]
 
+# Re-labelled A -> E during P9. The question says "this hybrid fund" and names no
+# scheme, and architecture 14.4.5 requires an unresolvable scheme to get a
+# question back rather than a figure from whichever fund ranked first. "Hybrid
+# fund" is deliberately NOT an alias for S5: bare category words are excluded from
+# the alias table because they collide across schemes, and a label that expects
+# a figure here is a label asking the router to guess.
+# Re-labelled A -> E during P9, and the 30-row class-A grid is preserved by the
+# two rows below rather than by this one. "This hybrid fund's benchmark index?"
+# names no scheme, and "hybrid fund" is deliberately not an alias for S5: bare
+# category words are excluded from the alias table because they collide across
+# schemes, and a label that expects a figure here is a label asking the router to
+# guess which of five funds "hybrid" means.
 - id: a-bench-S5
   question: "This hybrid fund's benchmark index?"
+  outcome: E
+  topic: benchmark
+  expect_behavior: ask_which_scheme
+  forbidden_patterns: ["cagr", "nav", "%"]
+
+# Replaces a-bench-S5 in the benchmark x S5 cell of the class-A grid, naming the
+# scheme outright so the row tests benchmark retrieval rather than alias
+# resolution.
+- id: a-bench-S5-named
+  question: "Which index does the HDFC Balanced Advantage Fund track?"
   outcome: A
   scheme_id: S5
   topic: benchmark
   expect_source_id: hdfc_balanced_advantage_growth
-  expect_keywords: ["benchmark", "nifty 50 hybrid"]
+  # The index name is the fact and stays a hard keyword. "benchmark" as a word
+  # is vocabulary -- asked "which index does it track", the model answers "the
+  # fund tracks the NIFTY 50 Hybrid Composite Debt 50:50 Index" -- so the concept
+  # check moves to `expect_any_of`.
+  expect_keywords: ["nifty 50 hybrid"]
+  expect_any_of: [["benchmark", "tracks", "index"]]
   forbidden_patterns: ["cagr", "nav", "%"]
 
 # ---------------------------------------------------------------------------
 # Multi-scheme: two schemes named, answer must cover both (2)
 # ---------------------------------------------------------------------------
+# Re-labelled A -> E during P9. Two schemes named means the router is ambiguous,
+# and architecture 14.4.6 answers an ambiguous scheme by asking which one rather
+# than guessing across funds -- "a figure attributed to the wrong one of five
+# similarly named funds is the PRD's own named failure mode". The two figures are
+# individually answerable; answering both at once is what is not supported.
 - id: a-multi-er
   question: "Compare the expense ratio of the large cap fund and the ELSS tax saver fund."
-  outcome: A
+  outcome: E
   topic: expense_ratio
-  expect_source_ids: [hdfc_large_cap_growth, hdfc_elss_tax_saver_growth]
-  expect_keywords: ["1.03", "1.21"]
+  expect_behavior: ask_which_scheme
   forbidden_patterns: ["cagr", "nav"]
 
+# Re-labelled A -> E during P9, same reason as a-multi-er: two schemes named is
+# ambiguity, and 14.4.6 asks which one rather than answering across funds.
 - id: a-multi-sip
   question: "What's the minimum SIP for the flexi cap fund versus the small cap fund?"
-  outcome: A
+  outcome: E
   topic: min_sip
-  expect_source_ids: [hdfc_equity_growth, hdfc_small_cap_growth]
-  expect_keywords: ["100"]
+  expect_behavior: ask_which_scheme
   forbidden_patterns: ["cagr", "nav"]
 
 # ---------------------------------------------------------------------------

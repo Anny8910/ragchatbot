@@ -217,6 +217,45 @@ def test_launch_date_is_not_a_return_figure():
     assert find_return_figures("The launch date is 01-Jan-2013. Source: [1]") == []
 
 
+def test_scheme_name_growth_is_not_a_governing_noun():
+    """Every fund in this corpus is a "Direct Growth" plan, so the phrase sits in
+    almost every answer that names a scheme -- and "growth" is a return noun.
+
+    Nearest-noun-wins then reads the fund's own name as governing whatever
+    figure follows, strips the sentence, and routes a correct answer to class D.
+    This cost three eval rows before the mask existed (S1 and S5 minimum SIP,
+    and the flexi cap minimum SIP), each of which was a false refusal of a
+    required answer.
+    """
+    text = ("The minimum SIP amount for the HDFC Large Cap Fund – Direct "
+            "Growth is Rs 100 per month. Source: [1]")
+    assert find_return_figures(text) == []
+
+
+@pytest.mark.parametrize("text", [
+    # Dash-introduced name.
+    "The HDFC Equity Fund – Direct Growth exit load is 1%.",
+    # Mid-sentence, with the non-breaking hyphen (U+2011) the model actually
+    # typed. A mask matching only literal spaces missed this one, and the false
+    # refusal returned.
+    "The minimum SIP amount for the HDFC Flexi Cap Direct Plan‑Growth is Rs 100.",
+    # Name followed by "Fund".
+    "Direct Growth Fund benchmark is NIFTY 500 Total Return Index.",
+])
+def test_direct_growth_in_a_scheme_name_is_masked(text):
+    assert find_return_figures(text) == []
+
+
+def test_masking_the_scheme_name_does_not_disarm_a_real_growth_claim():
+    """The mask is scoped to the phrase "direct growth". A performance claim that
+    says "growth" in any other wording is still caught, which is what stops the
+    fix above from becoming a hole in the class-D guarantee."""
+    for text in ("The growth was 20% over three years.",
+                 "Capital growth of Rs 100 was promised.",
+                 "Growth of 15% a year was reported."):
+        assert find_return_figures(text), text
+
+
 # ---------------------------------------------------------------------------
 # find_return_figures: the violations must be caught
 # ---------------------------------------------------------------------------

@@ -116,7 +116,15 @@ _EMAIL = re.compile(
 # because that is where Indian mobile numbers start: a bare "1234567890" is far
 # more often an account number (caught by the account rule) than a phone number,
 # and the loose form is what makes digit rules untrustworthy.
-_PHONE = re.compile(r"(?<![0-9])(?:\+?91[-\s]?|0)?[6-9][0-9]{9}(?![0-9])")
+#
+# A single internal space or hyphen is allowed, because that is how these are
+# actually written in prose: "call me on 98765 43210" and "98765-43210" are the
+# same ten digits as "9876543210", and the P9 fixture used the spaced form --
+# which the strict pattern missed, and the number went to the LLM and the trace
+# log in the clear. It is a PII leak, not a formatting nicety.
+_PHONE = re.compile(
+    r"(?<![0-9])(?:\+?91[-\s]?|0)?[6-9][0-9]{4}[-\s]?[0-9]{5}(?![0-9])"
+)
 
 _ACCOUNT = re.compile(r"(?<![0-9])[0-9]{8,16}(?![0-9])")
 _OTP = re.compile(r"(?<![0-9])[0-9]{4,6}(?![0-9])")

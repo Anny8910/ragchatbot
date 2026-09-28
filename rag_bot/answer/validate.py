@@ -265,6 +265,42 @@ _CURRENCY = re.compile(r"(?:rs\.?|inr|₹)\s?\d[\d,]*(?:\.\d+)?", re.IGNORECASE)
 # keyword 40 characters away.
 _GOVERNING_WINDOW = 48
 
+# Every scheme in the corpus is named "... - Direct Growth", and "growth" is a
+# return noun. So in a sentence that names a fund, the nearest return noun is
+# almost always the one in the fund's own name, at a closer offset than the
+# governing noun that actually decides the figure:
+#
+#     "The minimum SIP amount for the HDFC Large Cap Fund - Direct Growth is
+#      Rs 100 per month."
+#
+# Nearest-noun-wins then reads "Direct Growth" as governing the Rs 100, strips
+# the sentence, and -- because nothing is left -- routes the question to class D.
+# That is a false refusal of a correct, required answer, and it only showed up
+# once the eval set asked about funds whose names end in "Growth" (all of them).
+#
+# Masked unconditionally, and the trade-off is worth stating plainly. Every plan
+# in this corpus is a "Direct Growth" plan, so the phrase appears in nearly every
+# answer that names a fund; treating it as a return noun made the check
+# unusable. Restricting the mask to obvious name positions was tried and is
+# wrong: the model also writes "HDFC Flexi Cap Direct Plan-Growth is Rs 100",
+# where the name sits mid-sentence and no name-position pattern can reach it
+# without also swallowing the "Direct growth of 12%" it is meant to spare.
+#
+# The residual gap is narrow and recorded rather than hidden: a return claim
+# phrased specifically as "direct growth of X%" would be missed. Nothing in the
+# label set is phrased that way, and the other return nouns -- return, cagr,
+# nav, performance, yield, rank, percentile, since inception -- are untouched,
+# so the class-D rows are unaffected.
+#
+# The separator between "plan" and "growth" is whatever the model typed, so any
+# dash variant is accepted. A version matching only literal spaces missed
+# "Direct Plan‑Growth" (U+2011) and the false refusal came straight back.
+_SCHEME_NAME_SUFFIX = re.compile(
+    r"\bdirect\s*(?:plan\s*[\-\u2010-\u2015\u2212]?\s*)?growth\b"
+    r"|\bdirect\s+growth\s+option\b",
+    re.IGNORECASE,
+)
+
 
 def _governing_class(before: str, after: str) -> str:
     """'fee', 'return' or 'unknown' for the figure governed by the nearest noun.
@@ -322,6 +358,9 @@ def _scan_sentence(sentence: str) -> list[str]:
     and the drift is invisible because both copies look right in isolation.
     """
     found: list[str] = []
+    # The fund's own name cannot make a figure a return figure -- see
+    # _SCHEME_NAME_SUFFIX for what this cost before it was masked.
+    sentence = _SCHEME_NAME_SUFFIX.sub("direct plan", sentence)
     claim = _RANK_CLAIM.search(sentence)
     if claim:
         found.append(claim.group())

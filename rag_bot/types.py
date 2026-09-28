@@ -122,7 +122,7 @@ class Answer:
     k: int
     last_updated: str | None
     validation: Validation
-    latency: dict[str, float]
+    latency: dict[str, float]        # stage -> wall time in MILLISECONDS
     triage_layer: TriageLayer | None = None
     reason: str | None = None        # machine-readable refusal reason
 

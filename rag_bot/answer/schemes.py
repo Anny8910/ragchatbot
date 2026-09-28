@@ -25,21 +25,55 @@ def _normalise(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower()).strip()
 
 
+# "Flexi cap scheme", "large cap plan" and "HDFC Equity Fund" all name the same
+# kind of thing, and which one a person happens to use says nothing about which
+# fund they mean. Canonicalised so an alias written one way still matches a
+# question written another.
+#
+# This is a head-noun substitution, not a fuzzy match: the *distinguishing* words
+# ("hdfc", "flexi", "cap", "elss") are untouched and still have to match as whole
+# tokens, so the module's "exact matching only" rule holds. What it buys is
+# recall on a question the corpus answers perfectly well -- "redeeming the flexi
+# cap scheme" used to resolve to no scheme at all, and an unresolvable scheme
+# turns a class-A question into a class-E "which fund do you mean?".
+_HEAD_NOUNS = {"scheme", "schemes", "plan", "mf", "funds"}
+
+
+def _canonical_head_nouns(text: str) -> str:
+    """Rewrite interchangeable mutual-fund head nouns to "fund".
+
+    Only whole tokens, so "planning" is untouched and "scheme" inside
+    "schemesector" is not rewritten.
+    """
+    return re.sub(
+        r"(?<![a-z0-9])(scheme|schemes|plan|funds|mf)(?![a-z0-9])",
+        "fund", text,
+    )
+
+
 def _mentions_alias(normalised_question: str, alias: str) -> bool:
     """Whole-token containment of an alias inside the question.
 
-    `(?<![a-z0-9])` / `(?![a-z0-9])` rather than `\b`, because the aliases
+    `(?<![a-z0-9])` / `(?![a-z0-9])` rather than `\\b`, because the aliases
     contain punctuation ("hdfc elss tax saver fund" is fine, but "a/c" style
-    aliases are not) and `\b` would misbehave around non-word characters. The
+    aliases are not) and `\\b` would misbehave around non-word characters. The
     effect that matters is that "s1" does not match inside "s1234" and "large cap
     fund" does not match inside "large cap fundsector".
+
+    Tried against both the question as written and its head-noun canonical form,
+    so the alias table stays readable ("hdfc flexi cap fund") without going
+    blind to how people actually write the question.
     """
     needle = _normalise(alias)
     if not needle:
         return False
-    return re.search(
-        rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", normalised_question
-    ) is not None
+    canonical = _canonical_head_nouns(normalised_question)
+    for haystack in (normalised_question, canonical):
+        if re.search(
+            rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack
+        ) is not None:
+            return True
+    return False
 
 
 def resolve_scheme(question: str, sources: list[Source]) -> tuple[str | None, bool]:

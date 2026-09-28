@@ -140,6 +140,54 @@ RULES_C: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("c_advice_seeking", re.compile(r"\bwhich\s+of\s+these\b[^?]{0,40}\bshould\b", re.I)),
 )
 
+# ---------------------------------------------------------------------------
+# Class B -- administratively out of scope
+# ---------------------------------------------------------------------------
+# (rule_name, pattern). Returned by `classify_rules` as an outcome-B result, which
+# the pipeline short-circuits before retrieval.
+#
+# This set exists because the architecture's design assumed class B could be
+# decided by retrieval score, and the P9 calibration disproved that. The measured
+# failure is specific: an administrative question about the five indexed pages
+# retrieves *well*, because it is about the same subject matter. "How do I
+# download my capital gains statement?" scores 0.364 -- above the 0.35 floor --
+# and routes to class E, answering "which scheme do you mean?" to a question that
+# names no scheme and cannot be made answerable by naming one. The corpus is five
+# static scheme pages; a download procedure is not on any of them, and no
+# threshold can separate the two because they are the same topic.
+#
+# So these are decided from the question, the same way C and D are, and the
+# refusal names what IS covered. Deliberately narrow: each pattern requires a
+# procedural verb or an artefact noun, never a bare topic word. "What is the
+# expense ratio" must not match, and the mandatory false-positive test in
+# `tests/test_triage.py` covers all six in-scope topics.
+RULES_B: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("b_how_to", re.compile(r"\bhow\s+(?:do|can|would)\s+i\b[^?]{0,40}"
+                            r"\b(?:download|get|obtain|request|generate|"
+                            r"claim|redeem|update|change|register|"
+                            r"nominate|convert|switch)\b", re.I)),
+    ("b_statement_request", re.compile(r"\b(?:capital\s+gains|tax|"
+                                       r"account|transaction|holding|"
+                                       r"consolidated)\s+statement\b", re.I)),
+    ("b_document_request", re.compile(r"\b(?:download|obtain|request)\b[^?]{0,30}"
+                                      r"\b(?:statement|document|certificate|"
+                                      r"report|passbook|folio|"
+                                      r"acknowledgement|receipt)\b", re.I)),
+    # "... on the AMC website", "where do I ..." -- a request for a location or
+    # a procedure rather than a figure.
+    ("b_where_to_find", re.compile(r"\bwhere\s+(?:do|can)\s+i\b", re.I)),
+    ("b_login_portal", re.compile(r"\b(?:log\s?in|login|portal|app|"
+                                  r"website|dashboard|netbanking)\b", re.I)),
+    # Service actions the AMC performs, none of which are page facts.
+    ("b_service_action", re.compile(r"\b(?:change|update|switch|convert|"
+                                    r"transfer|claim)\b[^?]{0,25}"
+                                    r"\b(?:bank\s+account|banking|"
+                                    r"nominee|address|mobile|phone|email|"
+                                    r"email\s+id|pan|aadhaar|demat|"
+                                    r"panorama)\b", re.I)),
+)
+
+
 _TRIAGE_LABELS = ["A_or_B", "C_advice", "D_performance"]
 # Keyed uppercase, because the reply is normalised to uppercase before lookup: a
 # model that answers "c_advice" or "C_ADVICE" has still answered, and re-prompting
@@ -168,12 +216,14 @@ def _first_match(question: str, rules: tuple[tuple[str, re.Pattern[str]], ...]) 
 
 
 def classify_rules(question: str) -> TriageResult | None:
-    """Layer 1. Return a TriageResult with outcome C or D, or None if unsure.
+    """Layer 1. Return a TriageResult with outcome B, C or D, or None if unsure.
 
-    D is checked BEFORE C, because the same sentence can be both: "should I buy
-    the fund with the best returns" is a performance question first, and routing
-    it to C would produce a no-advice refusal that never mentions that the request
-    was for a figure.
+    Checked in the order D, C, B. D before C because the same sentence can be
+    both: "should I buy the fund with the best returns" is a performance question
+    first, and routing it to C would produce a no-advice refusal that never
+    mentions that the request was for a figure. B last because it is the
+    broadest of the three and a performance or advice question is a more
+    informative refusal than "not in the indexed sources".
     """
     if not question or not question.strip():
         return None
@@ -185,6 +235,10 @@ def classify_rules(question: str) -> TriageResult | None:
     name = _first_match(question, RULES_C)
     if name is not None:
         return TriageResult(outcome=Outcome.C_ADVICE_REFUSED, reason=name,
+                            layer="rules")
+    name = _first_match(question, RULES_B)
+    if name is not None:
+        return TriageResult(outcome=Outcome.B_NOT_IN_CORPUS, reason=name,
                             layer="rules")
     return None
 

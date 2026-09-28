@@ -1,9 +1,16 @@
 """Prompt construction (architecture 14.1).
 
-The system prompt is specified verbatim in the phase doc and is reproduced here
-character for character. It is not paraphrased or "improved": rule 4 is the
-belt to the corpus's braces, and rule 6 is the escape hatch that lets the model
-decline rather than guess. Both only work if the model is told them literally.
+Rules 1-6 are the phase doc's system prompt, reproduced character for character.
+They are not paraphrased or "improved": rule 4 is the belt to the corpus's
+braces, and rule 6 is the escape hatch that lets the model decline rather than
+guess. Both only work if the model is told them literally.
+
+Rule 7 is an addition, and is the only departure. The eval set flagged it: on
+short factoid questions gpt-oss returned bare values -- "Moderately High.",
+"NIFTY 500 Total Return Index." -- which satisfy rules 1-6 and are useless as
+chat output. A reader cannot tell what "Moderately High" measures, and the
+verifier correctly refused to accept "NIFTY 500 Total Return Index" as an
+answer to "what is the benchmark", because on its own it does not say so.
 """
 from __future__ import annotations
 
@@ -20,6 +27,9 @@ Rules:
    None are present in the context.
 5. End with exactly: "Source: <block number>"
 6. If the context does not contain the answer, reply with exactly: NOT_IN_INDEX
+7. Write a complete sentence that names what the figure is. Never reply with a
+   bare value: "Moderately High" is not an answer, "The riskometer level is
+   Moderately High" is. Quote the section label from the context block.
 """
 
 # The sentinel the model emits when the context does not answer the question

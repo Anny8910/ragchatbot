@@ -89,11 +89,35 @@ def test_class_c_requires_a_link(rows):
 
 
 def test_multi_scheme_rows_exist(rows):
-    multi = [r for r in rows if r.get("expect_source_ids")]
+    """The spec asks for 2 multi-scheme rows.
+
+    They exist, but labelled E rather than A, and the label is the correction:
+    architecture 14.4.6 answers an ambiguous scheme by asking which one rather
+    than comparing across funds, because "a figure attributed to the wrong one of
+    five similarly named funds is the PRD's own named failure mode". The two
+    figures in a comparison are individually answerable; answering both at once
+    is what is unsupported.
+
+    So the test checks the rows are present and are class E with no expected
+    source, which is what "multi-scheme" means for this product. Asserting they
+    are class A would be asserting the router should do the thing the spec
+    forbids.
+    """
+    multi = [
+        r for r in rows
+        if r.get("topic") and r.get("scheme_id") is None
+        and r["question"].count(" and ") + r["question"].count(" versus ") >= 1
+        and r["outcome"] in {"A", "E"}
+    ]
     assert len(multi) >= 2, "the spec requires 2 multi-scheme rows"
     for r in multi:
-        assert len(r["expect_source_ids"]) >= 2
-        assert isinstance(r["expect_source_ids"], list)
+        assert r["outcome"] is not False
+        assert r["outcome"] == "E", (
+            f"{r['id']}: a multi-scheme question must be class E, not "
+            f"{r['outcome']} -- the router does not compare across funds"
+        )
+        assert r.get("expect_source_ids") is None
+        assert r.get("expect_behavior") == "ask_which_scheme"
 
 
 def test_scheme_ambiguous_rows_exist(rows):
@@ -158,6 +182,17 @@ def test_class_a_expected_keywords_appear_in_their_source(rows):
                 f"{r['id']}: expected keyword {kw!r} is not in {source_id}'s text"
             )
             checked += 1
+        # `expect_any_of` groups are the paraphrase escape hatch, and this is
+        # where they are most dangerous: a group whose members are all corpus
+        # words is fine, but a group invented for one model phrasing is a label
+        # that was bent to fit an output. At least one member per group must
+        # therefore be grounded in the source text.
+        for group in r.get("expect_any_of", []):
+            grounded = [w for w in group if w.lower() in text]
+            assert grounded, (
+                f"{r['id']}: no member of {group} appears in {source_id}'s text"
+            )
+            checked += len(grounded)
     assert checked >= 50, f"only checked {checked} keywords"
 
 

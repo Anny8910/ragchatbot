@@ -43,10 +43,23 @@ SYNONYMS: dict[str, str] = {
     r"\bminimum\b": "minimum SIP",
     r"\bhow much\b|\bhow low\b": "minimum SIP",
     r"\b3 year\b|\bthree year\b|\b3-year\b|\bthree-year\b": "lock in 3 years",
+    # "Holding period on the flexi cap scheme?" measured at 0.393 against a 0.35
+    # floor -- a 0.043 margin, the thinnest of any passing row, and it flipped to
+    # B on a later run with identical code. The corpus says "Lock-in period";
+    # "holding period" is the same concept in ordinary investment English and is
+    # the phrasing the ELSS page's own prose uses ("minimum holding period").
+    r"\bholding period\b|\bhold period\b": "lock in",
     r"\bvolatility\b|\bvolatile\b": "riskometer risk",
     r"\brisk level\b|\brisk category\b": "riskometer",
     r"\bindex\b": "benchmark",
     r"\bref\b": "benchmark",
+    # "ISIN" measured at rank 7 of 8 inside the correct scheme: the Scheme
+    # identity chunk was retrieved but never reached the k=3 the model sees, so
+    # the model correctly reported NOT_IN_INDEX on a fact the corpus does carry.
+    # Same class of gap as "TER" above -- the pages say "ISIN:", the user says
+    # "ISIN", but the surrounding words in the identity chunk ("Registrar and
+    # transfer agent", "Plan option") are what the query vector actually matches.
+    r"\bisin\b|\bscheme code\b": "scheme identity ISIN fund name category plan",
 }
 
 _COMPILED = [(re.compile(p, re.IGNORECASE), r) for p, r in SYNONYMS.items()]

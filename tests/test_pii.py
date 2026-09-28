@@ -222,6 +222,33 @@ def test_bare_ten_digit_run_is_redacted_by_length_not_keyword():
     assert result.rules_fired == ["phone"]
 
 
+@pytest.mark.parametrize("text,secret", [
+    ("call me on 98765 43210 re: the riskometer", "98765 43210"),
+    ("call me on 98765-43210 re: the riskometer", "98765-43210"),
+    ("call +91 98765 43210 today", "98765 43210"),
+])
+def test_grouped_phone_numbers_are_redacted(text, secret):
+    """Grouped digits are how these are written in prose, and the strict
+    10-contiguous-digit pattern missed them entirely.
+
+    Found by the P9 PII fixtures: "call me on +91 98765 43210" passed the
+    scrubber untouched, so a real phone number would have reached the LLM and
+    been written to the trace log. A leak, not a formatting preference.
+    """
+    result = scrub(text)
+    assert secret not in result.text, result.text
+    assert "phone" in result.rules_fired
+
+
+def test_grouped_digits_that_are_not_ten_still_survive():
+    """The separator allowance must not turn shorter or longer digit runs into
+    phones. `555 444 333` is nine digits, and the [6-9] leading-digit rule still
+    applies after the separator."""
+    assert scrub("555 444 333").clean
+    assert scrub("order 98765432").clean
+    assert scrub("1234567890").clean
+
+
 def test_ten_digit_run_not_starting_6_to_9_is_not_a_phone():
     """Tightening: '1234567890' is far more often a folio number than a phone."""
     assert scrub("1234567890").clean

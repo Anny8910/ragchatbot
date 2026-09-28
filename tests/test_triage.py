@@ -150,25 +150,82 @@ def test_rule_set_catches_every_labelled_c_and_d_row(rows, sources):
     assert not missed, f"labelled C/D rows that layer 1 misses: {missed}"
 
 
-def test_b_rows_stay_out_of_triage(rows, sources):
-    """Class B is the retriever's job, not the router's.
+def test_b_rows_are_refused_not_answered(rows, sources):
+    """Every class-B row must not reach class A, and the ones the rule layer
+    claims must be claimed as B.
 
-    A B question that triage claims is not what the corpus-not-found path is for,
-    and a B question routed to D would trade "here is what I cover" for a
-    factsheet link on a question that was never about returns.
+    The original version of this test asserted that triage never fires on a B
+    row, on the assumption that class B belongs entirely to the retriever. P9's
+    calibration disproved that: an administrative question about these pages
+    scores 0.364 against a 0.35 floor, because it is about the same subject
+    matter, so no threshold separates it from an answerable question. Class B is
+    now decided from the question for that narrow case (`RULES_B`) and by the
+    gate otherwise. Both are refusals; neither is class A.
 
-    `b-nav` used to sit here and was moved to D (`d-nav`). A NAV request is a
-    figure request however it is phrased, so "NAV for X" cannot be B while the
-    long-standing `d_nav_of` rule makes "NAV of X" a D. The trade-off this test
-    guards against still applies to the rows that remain.
+    So the invariant is "never answered", not "never triaged" -- and where the
+    rule layer did claim a row, the outcome must be B and the reason must name a
+    `b_` rule, so a rule that starts matching class A fails loudly.
     """
-    wrong = [
-        (r["id"], classify(r["question"], sources=sources, use_llm=False).reason)
-        for r in rows if r["outcome"] == "B"
-        and classify(r["question"], sources=sources, use_llm=False).outcome
-        is not Outcome.A_ANSWERED
+    # A B row that names a scheme is NOT expected to be caught by triage. It
+    # resolves a scheme, so it takes the answered path and is refused later --
+    # by the relevance gate, or by the model returning NOT_IN_INDEX, which
+    # `validate` converts to a clean class B. "How much money is invested in the
+    # small cap fund overall?" (b-aum) is the case in point: AUM is a class-D
+    # *subject* but the label is B because the corpus carries no AUM figure, and
+    # that is a fact about the retrieved chunks, not about the question. Asserting
+    # triage must catch it would be asserting the score is unnecessary, which
+    # §4 of the chunking decision disproves.
+    named_scheme, scheme_free = [], []
+    for r in rows:
+        if r["outcome"] != "B":
+            continue
+        result = classify(r["question"], sources=sources, use_llm=False)
+        if result.scheme_id is not None:
+            named_scheme.append(r["id"])
+            continue
+        if result.outcome is not Outcome.B_NOT_IN_CORPUS:
+            scheme_free.append((r["id"], result.outcome.value, result.reason))
+    assert not scheme_free, scheme_free
+    assert named_scheme, "no B row resolves a scheme; the split is untested"
+
+
+def test_class_b_rule_layer_fires_only_on_administrative_questions():
+    """`RULES_B` is the one place a class-B decision is made from the question
+    rather than from a score, so the false-positive direction is the dangerous
+    one: a rule that matches a class-A topic turns an answerable question into a
+    refusal, and the corpus is only five pages, so refusals are cheap to write
+    and easy to over-reach.
+
+    Each in-scope topic is checked, and each B pattern is checked against the
+    six topic phrasings rather than trusting that a narrow regex is narrow.
+    """
+    administrative = [
+        "How do I download my capital gains statement?",
+        "How can I get my tax statement?",
+        "Where do I find the folio?",
+        "How do I change my bank account?",
+        "I want to log in to the portal",
+        "How do I claim my dividend?",
+        "How do I request a passbook?",
     ]
-    assert not wrong, wrong
+    for question in administrative:
+        result = classify_rules(question)
+        assert result is not None, f"no rule claimed {question!r}"
+        assert result.outcome is Outcome.B_NOT_IN_CORPUS, question
+        assert result.reason.startswith("b_"), result.reason
+
+    in_scope = [
+        "What is the expense ratio of the HDFC Large Cap Fund?",
+        "What is the exit load on the flexi cap fund?",
+        "What is the minimum SIP for the ELSS tax saver fund?",
+        "What is the lock-in period?",
+        "What is the riskometer level?",
+        "What is the benchmark index?",
+        "What is the ISIN of the ELSS tax saver fund?",
+    ]
+    for question in in_scope:
+        result = classify_rules(question)
+        assert result is None, f"class B rule fired on {question!r}: {result}"
 
 
 def test_in_scope_topic_questions_never_triage(rows, sources):
