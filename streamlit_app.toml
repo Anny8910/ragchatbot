@@ -1,0 +1,12 @@
+[server]
+# Render terminates TLS and forwards to the container. Streamlit needs to know
+# the external scheme or every generated URL comes out http://, which breaks the
+# websocket and the CORS preflight.
+enableXsrfProtection = true
+enableCORS = false
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"

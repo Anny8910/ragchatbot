@@ -1,0 +1,52 @@
+# Render Blueprint. Applied by "New → Blueprint" in the dashboard, or by
+# pushing this file to the default branch of the connected repository.
+#
+# Note on instance size: `plan: starter` is not optional here. The free tier is
+# 512MB and this image loads torch + sentence-transformers + a Chroma client
+# before it answers its first question, which does not fit in 512MB. On free the
+# service starts, loads the embedder, and is OOM-killed during the first
+# question -- so it looks deployed and then fails under use, which is worse than
+# failing to deploy. Starter is 512MB of RAM with 0.5 CPU; if the container is
+# still killed at first question, the next step up is `standard` (2GB).
+#
+# GROQ_API_KEY is NOT set here and must not be. Blueprint values are committed.
+# Set it in the dashboard (Service → Environment), or let Render pick it up from
+# a secret store. The app fails at start-up without it, by design:
+# `GroqProvider.__init__` raises a named error rather than deferring to the
+# first request.
+
+services:
+  - type: web
+    name: ragchatbot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    # The container builds its own index and starts Streamlit; there is nothing
+    # to migrate, so the service is stateless and safe to restart at any time.
+    autoDeploy: true
+    healthCheckPath: /_stcore/health
+    envVars:
+      # The app reads RAG_* from the environment with the same names it uses
+      # locally, so a value set here behaves identically to one in .env.
+      - key: RAG_PROVIDER
+        value: groq
+      - key: RAG_LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: RAG_EMBED_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+      - key: RAG_MIN_SCORE
+        value: "0.35"
+      - key: RAG_TOP_K
+        value: "3"
+      - key: RAG_MAX_SENTENCES
+        value: "3"
+      # No HF_TOKEN: the embedder is only needed at build time, inside the image,
+      # so the running service never calls the Hub.
+      - key: RAG_PII_REDACT
+        value: "true"
+      - key: RAG_TRIAGE_LLM
+        value: "true"
+      - key: RAG_LOG_TRACE
+        value: "true"

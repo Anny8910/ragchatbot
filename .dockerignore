@@ -1,0 +1,24 @@
+# The embedding model is downloaded at build time, not at start-up, so a cold
+# start does not need to reach Hugging Face.
+.env
+.env.*
+!.env.example
+
+# data/index/ is a build artefact -- the image regenerates it from the snapshots.
+# data/corpus/ is NOT ignored: the committed snapshots are the reproducibility
+# guarantee (architecture D4) and the image builds its index from them.
+data/index/
+data/logs/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+tests/
+docs/
+deliverables/
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+.idea/
+.vscode/
