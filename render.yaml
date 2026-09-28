@@ -1,13 +1,21 @@
 # Render Blueprint. Applied by "New → Blueprint" in the dashboard, or by
 # pushing this file to the default branch of the connected repository.
 #
-# Note on instance size: `plan: starter` is not optional here. The free tier is
-# 512MB and this image loads torch + sentence-transformers + a Chroma client
-# before it answers its first question, which does not fit in 512MB. On free the
-# service starts, loads the embedder, and is OOM-killed during the first
-# question -- so it looks deployed and then fails under use, which is worse than
-# failing to deploy. Starter is 512MB of RAM with 0.5 CPU; if the container is
-# still killed at first question, the next step up is `standard` (2GB).
+# On instance size, because the obvious assumption here is wrong:
+#
+#   free     512 MB   $0/mo    spins down after inactivity
+#   starter  512 MB   $7/mo    no spin-down
+#   standard 2 GB     $25/mo
+#
+# Starter is the SAME 512 MB as free, so upgrading to it does not buy memory --
+# it buys uptime. Measured peak RSS for this service is ~386 MB (interpreter,
+# torch, sentence-transformers, the Chroma client, and four retrievals over the
+# committed 45-chunk index), which leaves roughly 125 MB of headroom against a
+# 512 MB cgroup limit. Enough to work; not enough to be confident.
+#
+# `plan: starter` is therefore the floor, not the recommendation. If the service
+# is OOM-killed during or just after the first question, the fix is `standard`:
+# there is no intermediate step.
 #
 # GROQ_API_KEY is NOT set here and must not be. Blueprint values are committed.
 # Set it in the dashboard (Service → Environment), or let Render pick it up from

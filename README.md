@@ -91,11 +91,13 @@ point it at the repository, and set `GROQ_API_KEY` under the service's
 Environment tab. The key is deliberately absent from `render.yaml` because
 blueprint values are committed.
 
-`plan: starter` is not optional. The free tier is 512MB; this image loads torch,
-sentence-transformers and a Chroma client before answering its first question, so
-on free it starts, loads the embedder, and is OOM-killed during the first
-question — which looks deployed and then fails under use. If it is still killed
-at first question, go to `standard` (2GB).
+On instance size, the pricing page is not intuitive: **starter is the same 512MB
+as free** ($7/mo buys uptime, not memory). Measured peak RSS for this service is
+**~386MB** — interpreter, torch, sentence-transformers, the Chroma client, and
+four retrievals over the 45-chunk index. That is ~125MB of headroom against a
+512MB cgroup limit, so it will probably run and might be killed under
+concurrent load. If the service is OOM-killed during or just after the first
+question, move to `standard` (2GB, $25/mo). There is no step in between.
 
 The container builds its own index from the committed snapshots during the build,
 so a cold start never reaches the Hugging Face Hub. The build fails if the index
